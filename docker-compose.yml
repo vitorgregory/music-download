@@ -84,6 +84,7 @@ services:
       context: https://github.com/WorldObservationLog/wrapper.git#lite
       dockerfile: Dockerfile
     image: music-download-wrapper-lite:latest
+    pull_policy: build
     container_name: music-download-wrapper-lite
     platform: linux/amd64
     restart: unless-stopped
