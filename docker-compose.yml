@@ -10,7 +10,6 @@ services:
       - /DATA/AppData/music-download/data:/app/data
       - /DATA/AppData/music-download/downloads:/app/downloads
       - /DATA/AppData/music-download/config:/app/config
-      - /DATA/AppData/music-download/config/config.yaml:/app/apple-music-downloader/config.yaml
       - /DATA/AppData/music-download/wrapper-lite:/app/wrapper-lite-data
     environment:
       PYTHONUNBUFFERED: "1"

@@ -2,6 +2,7 @@ import re
 import requests
 import yaml
 import os
+import logging
 
 STRING_CONFIG_KEYS = {
     "media-user-token",
@@ -212,10 +213,13 @@ def get_config():
 
 def save_config(new_config):
     try:
+        os.makedirs(os.path.dirname(get_config_path()), exist_ok=True)
         with open(get_config_path(), 'w', encoding='utf-8') as f:
             yaml.dump(new_config, f, default_flow_style=False, allow_unicode=True)
         return True
-    except: return False
+    except Exception:
+        logging.getLogger(__name__).exception("Não foi possível gravar o arquivo de configuração: %s", get_config_path())
+        return False
 
 def validate_config_payload(payload):
     if not isinstance(payload, dict):

@@ -121,6 +121,8 @@ COPY --from=wrapper /app/rootfs /app/rootfs
 
 # Estruturas persistentes esperadas pela aplicação
 RUN mkdir -p /app/data /app/downloads /app/config/wrapper /app/rootfs/dev /app/rootfs/data /app/rootfs/system \
+    && rm -f /app/apple-music-downloader/config.yaml \
+    && ln -s /app/config/config.yaml /app/apple-music-downloader/config.yaml \
     && chmod 0755 /app/wrapper
 
 EXPOSE 5000
