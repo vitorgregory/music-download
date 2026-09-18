@@ -1,22 +1,12 @@
-<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowDown, ArrowUp, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, Download, Eye, LoaderCircle, Pause, Play, RefreshCw, RotateCcw, Search, Trash2, XCircle, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-=======
-import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, Download, Eye, LoaderCircle, Pause, Play, RefreshCw, RotateCcw, Search, Trash2, XCircle, type LucideIcon } from "lucide-react";
->>>>>>> 756da25 (1)
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/app-shell";
-<<<<<<< HEAD
 import { connectMusicSocket, musicApi, type Metadata, type MusicState, type QueueItem, type QueueStatus, type SelectionOption } from "@/lib/music-api";
-=======
-import { releases, type Release, type Task, type TaskStatus } from "@/lib/music-data";
-import { addToQueue, analyzeLink, getBackendState, setQueuePaused as updateQueuePaused } from "@/lib/backend-api";
->>>>>>> 756da25 (1)
 import { cn } from "@/lib/utils";
 
 type UiStatus = "Processando" | "Pendente" | "Concluída" | "Falha" | "Cancelada" | "Pausada";
@@ -43,17 +33,11 @@ function mapBackendTask(item: { id: number; title: string; format: string; statu
 }
 
 export function DownloadDashboard() {
-<<<<<<< HEAD
   const [state, setState] = useState<MusicState>(emptyState);
   const [connected, setConnected] = useState(false);
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState<"alac" | "aac" | "atmos">("alac");
   const [metadata, setMetadata] = useState<Metadata | null>(null);
-=======
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [url, setUrl] = useState("");
-  const [format, setFormat] = useState<"ALAC" | "AAC" | "Atmos">("ALAC");
->>>>>>> 756da25 (1)
   const [analyzing, setAnalyzing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [networkError, setNetworkError] = useState("");
@@ -65,7 +49,6 @@ export function DownloadDashboard() {
   const [year, setYear] = useState("Todos");
   const [sending, setSending] = useState(false);
   const [submitError, setSubmitError] = useState("");
-<<<<<<< HEAD
   const [drawerTask, setDrawerTask] = useState<QueueItem | null>(null);
 
   const openSelection = useCallback((options: SelectionOption[], id?: string | null) => {
@@ -135,84 +118,21 @@ export function DownloadDashboard() {
   }
   const items = state.queue.items;
   const totals = { active: items.filter((item) => ["processing", "pending"].includes(item.status)).length, done: items.filter((item) => item.status === "completed").length, failed: items.filter((item) => ["failed", "dead"].includes(item.status)).length, paused: state.queue.paused ? items.filter((item) => item.status === "pending").length : 0 };
-=======
-  const [networkError, setNetworkError] = useState(false);
-  const [queuePaused, setQueuePaused] = useState(false);
-  const [drawerTask, setDrawerTask] = useState<Task | null>(null);
-  const [backendError, setBackendError] = useState("");
-
-  const visible = useMemo(() => releases.filter((r) => (type === "Todos" || r.type === type) && (year === "Todos" || String(r.year) === year) && `${r.title} ${r.artist}`.toLowerCase().includes(query.toLowerCase())), [query, type, year]);
-  const syncState = async () => {
-    try {
-      const state = await getBackendState();
-      setTasks(state.queue.items.map(mapBackendTask));
-      setQueuePaused(state.queue.paused);
-      setBackendError("");
-    } catch (error) {
-      setBackendError(error instanceof Error ? error.message : "Backend indisponível.");
-    }
-  };
-  useEffect(() => {
-    void syncState();
-    const timer = window.setInterval(() => void syncState(), 2500);
-    return () => window.clearInterval(timer);
-  }, []);
-  const analyze = async () => {
-    if (!url.trim()) { setNetworkError(true); return; }
-    setNetworkError(false); setAnalyzing(true); setSubmitError("");
-    try {
-      const result = await analyzeLink(url.trim());
-      const metadata = result.metadata || {};
-      await addToQueue(url.trim(), format.toLowerCase(), typeof metadata["name"] === "string" ? metadata["name"] : undefined);
-      await syncState();
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Não foi possível adicionar o link.");
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-  const confirm = () => undefined;
-  const updateTask = (id: number, status: TaskStatus) => setTasks((items) => items.map((item) => item.id === id ? { ...item, status, progress: status === "Concluída" ? 100 : item.progress } : item));
-  const totals = { active: tasks.filter((t) => t.status === "Processando" || t.status === "Pendente").length, done: tasks.filter((t) => t.status === "Concluída").length, failed: tasks.filter((t) => t.status === "Falha").length, paused: tasks.filter((t) => t.status === "Pausada").length };
->>>>>>> 756da25 (1)
   const metrics: Array<{ label: string; value: number; icon: LucideIcon; color: string }> = [
     { label: "Em andamento", value: totals.active, icon: CirclePlay, color: "text-info" }, { label: "Concluídos", value: totals.done, icon: CheckCircle2, color: "text-success" }, { label: "Com falha", value: totals.failed, icon: AlertCircle, color: "text-destructive" }, { label: "Pausados", value: totals.paused, icon: CirclePause, color: "text-warning" },
   ];
 
   return <TooltipProvider><AppShell eyebrow="Operação ao vivo" title="Fila de downloads" connected={connected}>
     <section className="animate-rise-in border-b border-border pb-7">
-<<<<<<< HEAD
       <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-semibold">Adicionar do Apple Music</h2><p className="mt-1 text-sm text-muted-foreground">Cole um link de música, álbum, playlist ou artista.</p></div><span className="hidden text-xs text-muted-foreground lg:block">{connected ? "Servidor sincronizado" : "Aguardando servidor"}</span></div>
       <div className="flex flex-col gap-3 xl:flex-row"><div className="relative flex-1"><Download className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><input aria-label="Link do Apple Music" value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void analyze()} className="h-12 w-full rounded-md border border-input bg-surface-raised pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="https://music.apple.com/..."/></div><div className="grid h-12 grid-cols-3 rounded-md bg-muted p-1" aria-label="Formato de áudio">{(["alac","aac","atmos"] as const).map((item) => <Button key={item} variant="ghost" onClick={() => setFormat(item)} className={cn("h-10 min-w-20 uppercase shadow-none", format === item && "bg-surface-raised text-primary shadow-sm hover:bg-surface-raised")}>{item}</Button>)}</div><Button onClick={() => void analyze()} disabled={analyzing} className="h-12 min-w-36">{analyzing ? <><LoaderCircle className="animate-spin"/>Analisando</> : <><Search/>Analisar link</>}</Button></div>
       {networkError && <div role="alert" className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="size-4"/>{networkError}</div>}
       {metadata && <div className="mt-4 flex flex-col items-start gap-4 border-t border-border pt-4 sm:flex-row sm:items-center"><div className="flex min-w-0 flex-1 items-center gap-3">{metadata.image && <img src={metadata.image} alt="" className="size-14 rounded-md object-cover"/>}<div className="min-w-0"><strong className="block truncate">{metadata.title || "Link analisado"}</strong><span className="text-sm text-muted-foreground">{metadata.type || "Apple Music"}</span></div></div><Button onClick={() => void addDownload()} disabled={adding}>{adding ? <LoaderCircle className="animate-spin"/> : <Download/>}{adding ? "Adicionando" : "Adicionar à fila"}</Button></div>}
-=======
-      <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="font-display text-lg font-semibold">Adicionar do Apple Music</h2><p className="mt-1 text-sm text-muted-foreground">Cole um link de música, álbum, playlist ou artista.</p></div><span className="hidden text-xs text-muted-foreground lg:block">Última sincronização agora</span></div>
-      <div className="flex flex-col gap-3 xl:flex-row">
-        <div className="relative flex-1"><Download className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><input aria-label="Link do Apple Music" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && analyze()} className="h-12 w-full rounded-md border border-input bg-surface-raised pl-11 pr-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="https://music.apple.com/..."/></div>
-        <div className="grid h-12 grid-cols-3 rounded-md bg-muted p-1" aria-label="Formato de áudio">{(["ALAC","AAC","Atmos"] as const).map((item) => <Button key={item} variant="ghost" onClick={() => setFormat(item)} className={cn("h-10 min-w-20 shadow-none", format === item && "bg-surface-raised text-primary shadow-sm hover:bg-surface-raised")}>{item}{item === "ALAC" && <span className="sr-only">sem perdas</span>}</Button>)}</div>
-        <Button onClick={analyze} disabled={analyzing} className="h-12 min-w-36">{analyzing ? <><LoaderCircle className="animate-spin"/>Analisando</> : <><Search/>Analisar link</>}</Button>
-      </div>
-      {networkError && <div role="alert" className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="size-4"/>Informe um link válido para iniciar a análise.</div>}
-      {backendError && <div role="alert" className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="size-4"/>{backendError}</div>}
-      {submitError && <div role="alert" className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="size-4"/>{submitError}</div>}
->>>>>>> 756da25 (1)
     </section>
     <section className="grid grid-cols-2 gap-px border-b border-border bg-border py-px lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon, color }) => <div key={label} className="bg-background px-3 py-5 md:px-6"><div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground"><Icon className={cn("size-4", color)}/>{label}</div><strong className="mt-2 block font-display text-3xl">{value}</strong></div>)}</section>
-<<<<<<< HEAD
     <section className="pt-7"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-lg font-semibold">Fila atual</h2><p className="text-sm text-muted-foreground">{items.length} tarefas · {items.filter((item) => item.status === "processing").length} em processamento</p></div><Button variant={state.queue.paused ? "default" : "outline"} size="sm" onClick={() => void action(() => musicApi.pause(!state.queue.paused), state.queue.paused ? "Fila retomada." : "Fila pausada.")}>{state.queue.paused ? <><Play/>Retomar fila</> : <><Pause/>Pausar fila</>}</Button></div>{state.queue.paused && <div className="mb-4 flex items-start gap-3 rounded-md border border-warning/30 bg-warning-soft p-3 text-sm text-warning"><CirclePause className="mt-0.5 size-4 shrink-0"/><div><strong>Fila pausada.</strong> Novos itens permanecerão aguardando.</div></div>}{items.length === 0 ? <div className="grid min-h-72 place-items-center border-y border-dashed border-border text-center"><div><Download className="mx-auto mb-3 size-8 text-muted-foreground"/><h3 className="font-display font-semibold">A fila está vazia</h3><p className="mt-1 text-sm text-muted-foreground">Analise um link acima para adicionar músicas.</p></div></div> : <TaskList items={items} paused={state.queue.paused} onOpen={setDrawerTask} onAction={action}/>}</section>
     <ReleaseDialog open={!!selection} onOpenChange={(open) => { if (!open && !sending) setSelection(null); }} query={query} setQuery={setQuery} type={type} setType={setType} year={year} setYear={setYear} years={years} visible={visible} selected={selected} setSelected={setSelected} sending={sending} error={submitError} onConfirm={confirmSelection} onSkip={() => void action(musicApi.skipSelection, "Seleção ignorada.").then(() => setSelection(null))}/>
     <TaskDrawer task={drawerTask} logs={state.downloader.logs} onClose={() => setDrawerTask(null)} onAction={action}/>
-=======
-
-    <section className="pt-7">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-lg font-semibold">Fila atual</h2><p className="text-sm text-muted-foreground">{tasks.length} tarefas · {tasks.filter(t => t.status === "Processando").length} em processamento</p></div><div className="flex items-center gap-2"><Button variant={queuePaused ? "default" : "outline"} size="sm" onClick={async () => { try { const result = await updateQueuePaused(!queuePaused); setQueuePaused(result.paused); await syncState(); } catch (error) { setBackendError(error instanceof Error ? error.message : "Não foi possível alterar a fila."); } }} >{queuePaused ? <><Play/>Retomar fila</> : <><Pause/>Pausar fila</>}</Button></div></div>
-      {queuePaused && <div className="mb-4 flex items-start gap-3 rounded-md border border-warning/30 bg-warning-soft p-3 text-sm text-warning"><CirclePause className="mt-0.5 size-4 shrink-0"/><div><strong>Fila pausada.</strong> Downloads ativos foram interrompidos e novos itens vão aguardar.</div></div>}
-      {tasks.length === 0 ? <div className="grid min-h-72 place-items-center border-y border-dashed border-border text-center"><div><Download className="mx-auto mb-3 size-8 text-muted-foreground"/><h3 className="font-display font-semibold">A fila está vazia</h3><p className="mt-1 text-sm text-muted-foreground">Analise um link acima para adicionar músicas.</p></div></div> : <TaskList tasks={tasks} onOpen={setDrawerTask} onUpdate={updateTask}/>} 
-    </section>
-
-    <TaskDrawer task={drawerTask} setTask={setDrawerTask} onUpdate={updateTask}/>
->>>>>>> 756da25 (1)
   </AppShell></TooltipProvider>;
 }
 

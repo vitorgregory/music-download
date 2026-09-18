@@ -1,11 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-<<<<<<< HEAD
-import { Activity, Download, FolderCog, Headphones, Menu, WifiOff, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
-=======
 import { Activity, Download, FolderCog, Headphones, KeyRound, Menu, Plug, Terminal, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
->>>>>>> 756da25 (1)
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getBackendState, loginWrapper, submitTwoFactor, stopWrapper, type BackendState } from "@/lib/backend-api";
@@ -34,11 +29,7 @@ export function AppShell({ children, title, eyebrow, connected }: { children: Re
     <div className="md:pl-20">
       <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:px-8">
         <div className="flex items-center gap-3"><Button variant="outline" size="icon" className="md:hidden" onClick={() => setOpen(true)}><Menu/><span className="sr-only">Abrir menu</span></Button><div><p className="text-[11px] font-bold uppercase text-primary">{eyebrow}</p><h1 className="font-display text-xl font-semibold sm:text-2xl">{title}</h1></div></div>
-<<<<<<< HEAD
-         <div className="hidden items-center gap-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-xs font-medium sm:flex">{connected ? <><Activity className="size-4 text-success"/> Tempo real ativo</> : <><WifiOff className="size-4 text-destructive"/> Reconectando</>}</div>
-=======
         <button className="hidden items-center gap-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-xs font-medium sm:flex" onClick={() => setConnectionOpen(true)}><Activity className="size-4 text-success"/> Backend <span className="text-muted-foreground">Conectar</span></button>
->>>>>>> 756da25 (1)
       </header>
       <main className="mx-auto max-w-[1600px] p-4 md:p-8">{children}</main>
     </div>

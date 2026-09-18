@@ -1,10 +1,6 @@
 from pathlib import Path
-<<<<<<< HEAD
-from flask import render_template, request, jsonify
-from flask_wtf.csrf import generate_csrf
-=======
 from flask import Response, render_template, request, jsonify
->>>>>>> 756da25 (1)
+from flask_wtf.csrf import generate_csrf
 from urllib.parse import urlparse, parse_qs
 from . import app, limiter, csrf
 from .process_manager import wrapper, downloader, get_wrapper_bin_path, get_wrapper_cache_dir, get_wrapper_rootfs_path
