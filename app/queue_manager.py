@@ -67,7 +67,9 @@ def add_to_queue(link, fmt, title=None):
 
 def get_queue_status():
     conn = get_db_connection()
-    items = conn.execute("SELECT * FROM queue ORDER BY position ASC, id DESC").fetchall()
+    items = conn.execute(
+        "SELECT * FROM queue ORDER BY position DESC, id DESC"
+    ).fetchall()
     conn.close()
     return {"items": [dict(ix) for ix in items], "paused": QUEUE_PAUSED}
 

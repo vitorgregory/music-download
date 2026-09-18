@@ -255,7 +255,7 @@ class DownloaderManager(ProcessManager):
         super().__init__()
         self.current_format = "alac"
         self.is_playlist = False
-        self.selection_context = None, "albums", "music_videos", "other"
+        self.selection_context = "albums", "music_videos", "other"
         # Pré-compila Regex para performance
         self.re_table = re.compile(r"^\s*\|\s*(\d+)\s*\|")
         self.re_list = re.compile(r"(?:^|\s|\[\w+\]\s+)(\d+)\s*[\.\:\-\)\]]\s+(.+)$")
@@ -289,7 +289,8 @@ class DownloaderManager(ProcessManager):
 
         label = columns[0]
         date = ""
-        kind_raw = ""      # tipo bruto lido do texto
+        kind_raw = ""   
+        kind= "unknown"   # tipo bruto lido do texto
         is_live = False
         duration_str = ""
         track_count = None
@@ -504,7 +505,7 @@ class DownloaderManager(ProcessManager):
                 if any(k in clean_line for k in self.selection_keywords):
                     with self._lock:
                         self.needs_input = True
-                        self.selection_id = self.selection_id or f"selection-{int(time.time() * 1000)}"
+                        self.selection_id = f"selection-{int(time.time() * 1000)}"
                     
                     # Try to parse options immediately
                     options = self._parse_options(log_buffer)
