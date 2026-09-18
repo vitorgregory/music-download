@@ -52,6 +52,7 @@ RUN apt-get update \
        ca-certificates \
        curl \
        gnupg \
+         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz \
