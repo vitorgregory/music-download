@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Inicializa controles
     setupEventListeners();
     // Inicia Loop de Estado
+    fetchState();
     setInterval(fetchState, 1500);
     // Inicia detector de queda de internet e reconexão automática
     initializeOfflineDetection();
@@ -503,18 +504,18 @@ function renderQueueTable(container, items, isActiveTab) {
         // Action buttons
         let actionHtml = "";
         if (item.status === 'processing') {
-            actionHtml = `<button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do download ${item.id}"><i class="fas fa-panel-right"></i></button><button type="button" onclick="stopTask(${item.id})" class="btn btn-sm btn-outline-danger" title="Parar download" aria-label="Parar download ${item.id}"><i class="fas fa-stop"></i></button>`;
+            actionHtml = `<button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do download ${item.id}"><i class="fas fa-table-columns"></i></button><button type="button" onclick="stopTask(${item.id})" class="btn btn-sm btn-outline-danger" title="Parar download" aria-label="Parar download ${item.id}"><i class="fas fa-stop"></i></button>`;
         } else if (item.status === 'pending') {
             actionHtml = `
                 <div class="queue-actions" role="group" aria-label="Ações do item ${item.id}">
-                    <button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-panel-right"></i></button>
+                    <button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-table-columns"></i></button>
                     <button type="button" onclick="moveTask(${item.id}, 'up')" class="btn btn-outline-secondary" title="Mover para cima" aria-label="Mover item ${item.id} para cima"><i class="fas fa-arrow-up"></i></button>
                     <button type="button" onclick="moveTask(${item.id}, 'down')" class="btn btn-outline-secondary" title="Mover para baixo" aria-label="Mover item ${item.id} para baixo"><i class="fas fa-arrow-down"></i></button>
                     <button type="button" onclick="cancelTask(${item.id}, 'pending')" class="btn btn-outline-danger" title="Cancelar item" aria-label="Cancelar item ${item.id}"><i class="fas fa-ban"></i></button>
                 </div>
             `;
         } else {
-            actionHtml = `<div class="queue-actions"><button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-panel-right"></i></button>${['failed','dead','cancelled'].includes(item.status) ? `<button type="button" onclick="retryTask(${item.id})" class="btn btn-sm btn-outline-secondary" title="Tentar novamente" aria-label="Tentar novamente o item ${item.id}"><i class="fas fa-rotate-right"></i></button>` : ''}<button type="button" onclick="deleteHistory(${item.id})" class="btn btn-sm btn-outline-secondary" title="Remover do histórico" aria-label="Remover item ${item.id} do histórico"><i class="fas fa-trash"></i></button></div>`;
+            actionHtml = `<div class="queue-actions"><button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-table-columns"></i></button>${['failed','dead','cancelled'].includes(item.status) ? `<button type="button" onclick="retryTask(${item.id})" class="btn btn-sm btn-outline-secondary" title="Tentar novamente" aria-label="Tentar novamente o item ${item.id}"><i class="fas fa-rotate-right"></i></button>` : ''}<button type="button" onclick="deleteHistory(${item.id})" class="btn btn-sm btn-outline-secondary" title="Remover do histórico" aria-label="Remover item ${item.id} do histórico"><i class="fas fa-trash"></i></button></div>`;
         }
 
         const formatBadge = `<span class="badge-soft">${escapeHtml(String(item.format || 'alac').toUpperCase())}</span>`;
