@@ -7,6 +7,7 @@ import logging
 STRING_CONFIG_KEYS = {
     "media-user-token",
     "authorization-token",
+    "lite-server",
     "language",
     "storefront",
     "alac-save-folder",
