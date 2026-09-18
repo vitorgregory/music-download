@@ -1,6 +1,10 @@
 from pathlib import Path
+<<<<<<< HEAD
 from flask import render_template, request, jsonify
 from flask_wtf.csrf import generate_csrf
+=======
+from flask import Response, render_template, request, jsonify
+>>>>>>> 756da25 (1)
 from urllib.parse import urlparse, parse_qs
 from . import app, limiter, csrf
 from .process_manager import wrapper, downloader, get_wrapper_bin_path, get_wrapper_cache_dir, get_wrapper_rootfs_path
@@ -14,6 +18,7 @@ import shutil
 import threading
 import tempfile
 import re
+import requests
 from flask import current_app
 
 def get_cred_path(): 
@@ -121,7 +126,38 @@ def index():
         wrapper.start(creds[0], creds[1])
         if load_2fa_cache():
             threading.Thread(target=submit_cached_2fa_if_needed, daemon=True).start()
-    return render_template("index.html")
+    return proxy_react_request("/")
+
+
+def proxy_react_request(path):
+    target = f"http://127.0.0.1:3000{path}"
+    try:
+        upstream = requests.request(
+            request.method,
+            target,
+            params=request.args,
+            headers={"Cookie": request.headers.get("Cookie", "")},
+            timeout=10,
+        )
+        headers = {
+            key: value
+            for key, value in upstream.headers.items()
+            if key.lower() not in {"content-length", "connection", "transfer-encoding"}
+        }
+        return Response(upstream.content, status=upstream.status_code, headers=headers)
+    except requests.RequestException as error:
+        current_app.logger.error("React server indisponível: %s", error)
+        return jsonify({"status": "error", "message": "Interface React indisponível."}), 503
+
+
+@app.route("/configuracoes")
+def react_settings():
+    return proxy_react_request("/configuracoes")
+
+
+@app.route("/assets/<path:asset_path>")
+def react_asset(asset_path):
+    return proxy_react_request(f"/assets/{asset_path}")
 
 @app.route("/settings")
 def settings(): 

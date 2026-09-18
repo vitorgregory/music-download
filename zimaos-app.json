@@ -3,6 +3,7 @@
   "description": "Apple Music Downloader Web UI",
   "icon": "icon.png",
   "version": "1.0.0",
+  "architecture": "amd64",
   "ports": [{"external": 5000, "internal": 5000, "protocol": "tcp"}],
   "volumes": [
     {"name": "data", "description": "Credentials & Queue DB"},

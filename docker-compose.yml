@@ -20,6 +20,7 @@ services:
       WRAPPER_ROOTFS: "/app/rootfs"
       WRAPPER_CACHE_DIR: "/app/config/wrapper"
       WRAPPER_LITE_2FA_FILE: "/app/wrapper-lite-data/2fa.txt"
+      RATELIMIT_STORAGE_URL: "redis://redis:6379/0"
       STALL_TIMEOUT_SECONDS: "300"
       MAX_RETRIES: "3"
       RETRY_BASE_SECONDS: "5"
@@ -33,6 +34,22 @@ services:
     depends_on:
       wrapper-lite:
         condition: service_started
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    platform: linux/amd64
+    container_name: music-download-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /DATA/AppData/music-download/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   wrapper-lite:
     build:

@@ -1,11 +1,22 @@
 # Dockerfile para music-download
 # Usa a imagem oficial do wrapper como fonte do executável e do ambiente rootfs, conforme a estrutura validada em ghcr.io/itouakirai/wrapper:x86.
 # O wrapper distribuído é x86_64; esta imagem é publicada para o ZimaOS em amd64.
+FROM oven/bun:1 AS frontend
+
+WORKDIR /frontend
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY src ./src
+COPY public ./public
+COPY components.json tsconfig.json vite.config.ts .prettierrc ./
+RUN bun run build
+
 FROM ghcr.io/itouakirai/wrapper:x86 AS wrapper
 
 FROM ubuntu:22.04 AS runtime
 
 ARG TARGETARCH
+ARG NODE_VERSION=22.14.0
 ARG GO_VERSION=1.23.2
 ARG BENTO4_VERSION=1-6-0-641
 
@@ -42,6 +53,10 @@ RUN apt-get update \
        curl \
        gnupg \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz \
+     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+     && rm -f /tmp/node.tar.xz
 
 # libssl1.1 precisa ser instalado na arquitetura correta do host/target; não faça download fixo de .deb amd64.
 RUN echo "deb http://security.ubuntu.com/ubuntu focal-security main" > /etc/apt/sources.list.d/focal-security.list \
@@ -85,6 +100,7 @@ RUN git clone --depth 1 \
 
 # Copia o código da aplicação web
 COPY . /app
+COPY --from=frontend /frontend/.output /app/.output
 
 # Wrapper da autenticação do Apple Music.
 # A imagem oficial já entrega o executável + raiz de runtime (/app/rootfs) completa, incluindo /app/rootfs/dev.

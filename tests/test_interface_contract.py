@@ -28,6 +28,13 @@ def test_dashboard_has_core_download_controls():
     assert "Analisar link" in source
     assert 'role="alert"' in source
     assert "Informe um link válido" in source
+    assert 'from "@/lib/backend-api"' in source
+    assert "getBackendState" in source
+    assert "analyzeLink" in source
+    assert "addToQueue" in source
+    assert "setQueuePaused" in source
+    assert "initialTasks" not in source
+    assert "window.setTimeout" not in source
 
 
 def test_release_selection_supports_search_filters_and_queue_submission():
@@ -36,11 +43,9 @@ def test_release_selection_supports_search_filters_and_queue_submission():
     assert 'aria-label="Buscar releases"' in source
     assert 'aria-label="Filtrar por tipo"' in source
     assert 'aria-label="Filtrar por ano"' in source
-    assert "setSelected" in source
-    assert "toggleAll" in source
-    assert "onConfirm={confirm}" in source
-    assert "setTasks((current)" in source
-    assert "Não foi possível enviar a seleção" in source
+    assert "addToQueue" in source
+    assert "await syncState()" in source
+    assert "Não foi possível adicionar o link" in source
 
 
 def test_queue_covers_expected_statuses_and_actions():
@@ -52,7 +57,6 @@ def test_queue_covers_expected_statuses_and_actions():
 
     assert "Pausar fila" in dashboard
     assert "Retomar fila" in dashboard
-    assert "Limpar" in dashboard
     assert "Tentar novamente" in dashboard
     assert "Ver detalhes" in dashboard
 
@@ -71,6 +75,21 @@ def test_settings_route_and_controls_match_download_preferences():
     assert "Restaurar padrões" in page
     assert "Salvar alterações" in page
     assert "Preferências salvas" in page
+    assert "getConfig" in page
+    assert "saveConfig" in page
+
+
+def test_react_shell_exposes_wrapper_login_two_factor_and_logs():
+    source = read_source("src/components/app-shell.tsx")
+
+    assert "loginWrapper" in source
+    assert "submitTwoFactor" in source
+    assert "stopWrapper" in source
+    assert 'aria-label="Email do wrapper"' in source
+    assert 'aria-label="Senha do wrapper"' in source
+    assert 'aria-label="Código 2FA"' in source
+    assert "Wrapper e logs" in source
+    assert "Nenhum log disponível" in source
 
 
 def test_navigation_exposes_downloads_and_settings_routes():
