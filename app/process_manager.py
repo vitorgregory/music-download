@@ -291,41 +291,72 @@ class DownloaderManager(ProcessManager):
         kind = ""
         is_live = False
         duration = ""
-        track_count = None
+        track_count = None   # None em vez de string vazia
         extras = []
 
         for col in columns[1:]:
-            if not date and self.re_date.search(col):
-                date = col.strip()
+            col_stripped = col.strip()
+            lower = col_stripped.lower()
+
+            if not date and self.re_date.search(col_stripped):
+                date = col_stripped
                 continue
-            if not duration and self.re_duration.search(col):
-                duration = col.strip()
+
+            if not duration and self.re_duration.search(col_stripped):
+                duration = col_stripped
                 continue
-            count_match = self.re_track_count.search(col)
-            if track_count is None and count_match:
-                track_count = int(count_match.group(1))
+
+            if track_count is None:
+                count_match = self.re_track_count.search(col_stripped)
+                if count_match:
+                    try:
+                        track_count = int(count_match.group(1))
+                    except ValueError:
+                        track_count = None
+                    continue
+
+            if not kind and any(t in lower for t in [
+                "album", "single", "ep", "compilation", "playlist",
+                "song", "music video", "video"
+            ]):
+                kind = col_stripped
                 continue
-            if not kind and any(t in col.lower() for t in ["album", "single", "ep", "compilation", "playlist", "song", "music video", "video"]):
-                kind = col.strip()
-                continue
-            if any(t in col.lower() for t in ["live", "concert"]):
+
+            if any(t in lower for t in ["live", "concert"]):
                 is_live = True
                 continue
-            extras.append(col.strip())
 
-        normalized = normalize_media_item({
-            "id": entry_id,
-            "type": kind or "unknown",
-            "attributes": {
+            extras.append(col_stripped)
+
+        # Fallbacks seguros: se não tiver info, não quebra
+        
+            if not kind:
+                # Se tiver muitas faixas, assume álbum
+                if track_count and track_count >= 7:
+                    kind = "album"
+                # Se tiver indicação de live, assume live (subtipo de álbum)
+                elif is_live:
+                    kind = "live"
+                else:
+                    kind = "unknown"
+
+            attributes = {
                 "name": label,
-                "releaseDate": date,
-                "track_count": track_count,
+                "releaseDate": date or "",
+                "track_count": track_count if track_count is not None else 0,
                 "duration": duration,
                 "isLive": is_live,
             }
-        })
-        normalized["tags"] = analyze_label_metadata(label)["tags"]
-        normalized["extra"] = ", ".join([e for e in extras if e])
+
+            normalized = normalize_media_item({
+                "id": entry_id,
+                "type": kind,
+                "attributes": attributes,
+            })
+            ...
+            normalized["label"] = label
+            normalized["kind"] = kind
+
         return normalized
 
     def start(self, link, args=None):
@@ -420,10 +451,12 @@ class DownloaderManager(ProcessManager):
                 normalized = normalize_media_item({
                     "id": m.group(1),
                     "type": "unknown",
-                    "attributes": {"name": label}
+                    "attributes": {"name": label},
                 })
                 normalized["tags"] = analyze_label_metadata(label)["tags"]
                 normalized["duration"] = ""
+                normalized["label"] = label       # importante
+                normalized.setdefault("kind", "unknown")
                 options.insert(0, normalized)
         return options
 
@@ -431,8 +464,17 @@ class DownloaderManager(ProcessManager):
         merged = []
         seen = set()
         for option in list(candidates or []):
-            key = (option.get('id'), option.get('label'))
-            if key and key not in seen:
+            # nome preferencial: label → name → attributes.name
+            name = option.get("label") or option.get("name") \
+                or option.get("attributes", {}).get("name")
+
+            key = (option.get("id"), name)
+            if option.get("id") is None or name is None:
+                # Se faltar info básica, ainda assim incluímos, mas não tentamos deduplicar
+                merged.append(option)
+                continue
+
+            if key not in seen:
                 merged.append(option)
                 seen.add(key)
         return merged
