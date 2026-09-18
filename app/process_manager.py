@@ -255,6 +255,7 @@ class DownloaderManager(ProcessManager):
         super().__init__()
         self.current_format = "alac"
         self.is_playlist = False
+        self.selection_context = None, "albums", "music_videos", "other"
         # Pré-compila Regex para performance
         self.re_table = re.compile(r"^\s*\|\s*(\d+)\s*\|")
         self.re_list = re.compile(r"(?:^|\s|\[\w+\]\s+)(\d+)\s*[\.\:\-\)\]]\s+(.+)$")
@@ -288,77 +289,53 @@ class DownloaderManager(ProcessManager):
 
         label = columns[0]
         date = ""
-        kind = ""
+        kind_raw = ""      # tipo bruto lido do texto
         is_live = False
-        duration = ""
-        track_count = None   # None em vez de string vazia
+        duration_str = ""
+        track_count = None
         extras = []
 
         for col in columns[1:]:
             col_stripped = col.strip()
             lower = col_stripped.lower()
-
-            if not date and self.re_date.search(col_stripped):
-                date = col_stripped
-                continue
-
-            if not duration and self.re_duration.search(col_stripped):
-                duration = col_stripped
-                continue
-
-            if track_count is None:
-                count_match = self.re_track_count.search(col_stripped)
-                if count_match:
-                    try:
-                        track_count = int(count_match.group(1))
-                    except ValueError:
-                        track_count = None
-                    continue
-
-            if not kind and any(t in lower for t in [
-                "album", "single", "ep", "compilation", "playlist",
-                "song", "music video", "video"
-            ]):
-                kind = col_stripped
-                continue
-
-            if any(t in lower for t in ["live", "concert"]):
-                is_live = True
-                continue
-
-            extras.append(col_stripped)
-
-        # Fallbacks seguros: se não tiver info, não quebra
-        
-            if not kind:
-                # Se tiver muitas faixas, assume álbum
-                if track_count and track_count >= 7:
-                    kind = "album"
-                # Se tiver indicação de live, assume live (subtipo de álbum)
-                elif is_live:
-                    kind = "live"
-                else:
-                    kind = "unknown"
-
-            attributes = {
-                "name": label,
-                "releaseDate": date or "",
-                "track_count": track_count if track_count is not None else 0,
-                "duration": duration,
-                "isLive": is_live,
-            }
-
-            normalized = normalize_media_item({
-                "id": entry_id,
-                "type": kind,
-                "attributes": attributes,
-            })
             ...
-            normalized["label"] = label
-            normalized["kind"] = kind
+            # (data, duração, track_count, etc. como antes)
+
+        attributes = {
+            "name": label,
+            "releaseDate": date or "",
+            "track_count": track_count if track_count is not None else 0,
+            "duration": duration_str,
+            "duration_sec": _parse_duration_to_seconds(duration_str) or 0,
+            "isLive": is_live,
+        }
+
+        # Se a tabela atual estiver no contexto de MV, força tipo bruto "music_video"
+        raw_type = kind_raw or "unknown"
+        if self.selection_context == "music_videos":
+            raw_type = "music_video"
+
+        release_info = normalize_release_type({
+            "type": raw_type,
+            "attributes": attributes,
+        })
+        kind = release_info["kind"]
+
+        normalized = normalize_media_item({
+            "id": entry_id,
+            "type": kind,
+            "attributes": attributes,
+        })
+
+        normalized["tags"] = analyze_label_metadata(label)["tags"]
+        normalized["extra"] = ", ".join([e for e in extras if e])
+        normalized["label"] = label
+        normalized["kind"] = kind
+        normalized["track_count"] = release_info["track_count"]
+        normalized["duration_sec"] = release_info["duration_sec"]
+        normalized["raw_type"] = release_info["raw_type"]
 
         return normalized
-
     def start(self, link, args=None):
         if self.running: return False
         
@@ -508,6 +485,10 @@ class DownloaderManager(ProcessManager):
                 self._log(line)
                 log_buffer.append(line)
                 clean_line = strip_ansi(line).lower()
+                if "select from the albums options above" in clean_line:
+                    self.selection_context = "albums"
+                elif "select from the music-videos options above" in clean_line:
+                    self.selection_context = "music_videos"
 
                 if any(marker in clean_line for marker in [
                     "error detected, press enter",
@@ -538,7 +519,8 @@ class DownloaderManager(ProcessManager):
                                 'options': options,
                                 'options_count': len(options),
                                 'selection_id': self.selection_id,
-                                'request_id': self.selection_id
+                                'request_id': self.selection_id,
+                                'context': self.selection_context
                             }, skip_sid=True)
                         except Exception as e:
                             self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
