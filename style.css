@@ -139,7 +139,7 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: 0; }
 .queue-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-link { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; font-size: .68rem; }
 .status-badge, .badge-soft { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px; font-size: .66rem; font-weight: 700; border: 1px solid transparent; }
-.status-processing { color: var(--info); background: var(--info-soft); }.status-completed { color: var(--success); background: var(--success-soft); }.status-failed { color: var(--danger); background: var(--danger-soft); }.status-pending { color: var(--ink-soft); background: #edf0ee; }.status-paused { color: var(--warning); background: var(--warning-soft); }
+.status-badge.status-processing { color: var(--info); background: var(--info-soft); }.status-badge.status-completed { color: var(--success); background: var(--success-soft); }.status-badge.status-failed { color: var(--danger); background: var(--danger-soft); }.status-badge.status-pending { color: var(--ink-soft); background: #edf0ee; }.status-badge.status-paused { color: var(--warning); background: var(--warning-soft); }
 .badge-soft { color: var(--primary-dark); background: var(--primary-soft); border-color: #c7e4e2; }
 .progress-wrap { display: grid; grid-template-columns: minmax(70px,1fr) 34px; align-items: center; gap: 8px; }
 .queue-table .progress { height: 6px; background: #e8ecea; border-radius: 99px; }.queue-table .progress-bar { background: var(--primary); border-radius: 99px; }

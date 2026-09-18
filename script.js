@@ -119,6 +119,7 @@ function openArtistSelectionModal(data) {
     selectionState.isOpen = true;
     selectionState.isSubmitting = false;
     selectionState.errorMessage = '';
+    document.getElementById('selection-error')?.classList.add('d-none');
     selectionState.selectionId = requestId;
     if (wasClosed) selectionState.openedBy = document.activeElement;
     selArea.classList.remove('d-none');
@@ -479,10 +480,10 @@ function renderQueueTable(container, items, isActiveTab) {
         let statusClass = "";
         
         if (item.status === 'processing') { 
-            statusBadge = '<span class="badge status-badge bg-warning text-dark"><i class="fas fa-spinner fa-spin"></i> Processando</span>';
+            statusBadge = '<span class="status-badge status-processing"><i class="fas fa-spinner fa-spin"></i> Processando</span>';
             statusClass = "status-processing";
         } else if (item.status === 'completed') { 
-            statusBadge = '<span class="badge status-badge bg-success"><i class="fas fa-check"></i> Concluído</span>';
+            statusBadge = '<span class="status-badge status-completed"><i class="fas fa-check"></i> Concluído</span>';
             statusClass = "status-completed";
         } else if (item.status === 'failed' || item.status === 'dead') { 
             statusBadge = `<span class="status-badge status-failed"><i class="fas fa-triangle-exclamation"></i> ${item.status === 'dead' ? 'Falha final' : 'Falha'}</span>`;
@@ -516,7 +517,7 @@ function renderQueueTable(container, items, isActiveTab) {
             actionHtml = `<div class="queue-actions"><button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-panel-right"></i></button>${['failed','dead','cancelled'].includes(item.status) ? `<button type="button" onclick="retryTask(${item.id})" class="btn btn-sm btn-outline-secondary" title="Tentar novamente" aria-label="Tentar novamente o item ${item.id}"><i class="fas fa-rotate-right"></i></button>` : ''}<button type="button" onclick="deleteHistory(${item.id})" class="btn btn-sm btn-outline-secondary" title="Remover do histórico" aria-label="Remover item ${item.id} do histórico"><i class="fas fa-trash"></i></button></div>`;
         }
 
-        const formatBadge = `<span class="badge badge-soft">${item.format.toUpperCase()}</span>`;
+        const formatBadge = `<span class="badge-soft">${escapeHtml(String(item.format || 'alac').toUpperCase())}</span>`;
         
         return `
             <tr class="queue-row ${statusClass}">
