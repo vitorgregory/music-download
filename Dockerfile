@@ -11,6 +11,15 @@ COPY public ./public
 COPY components.json tsconfig.json vite.config.ts .prettierrc ./
 RUN bun run build
 
+# O servidor Nitro gerado mantém algumas dependências como imports externos
+# (por exemplo, `ws`, usado por socket.io-client). Instala somente as
+# dependências de runtime em um estágio separado para a imagem final.
+FROM oven/bun:1 AS frontend-runtime-deps
+
+WORKDIR /frontend
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+
 FROM ghcr.io/itouakirai/wrapper:x86 AS wrapper
 
 FROM ubuntu:22.04 AS runtime
@@ -102,6 +111,7 @@ RUN git clone --depth 1 \
 # Copia o código da aplicação web
 COPY . /app
 COPY --from=frontend /frontend/.output /app/.output
+COPY --from=frontend-runtime-deps /frontend/node_modules /app/node_modules
 
 # Wrapper da autenticação do Apple Music.
 # A imagem oficial já entrega o executável + raiz de runtime (/app/rootfs) completa, incluindo /app/rootfs/dev.
