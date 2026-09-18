@@ -7,6 +7,15 @@ from datetime import datetime, timedelta
 from .process_manager import downloader
 from typing import Optional
 
+
+def emit_queue_update(event_name="queue_update"):
+    """Notify connected dashboards; polling remains the reliability fallback."""
+    try:
+        from . import socketio
+        socketio.emit(event_name, {"changed": True})
+    except Exception:
+        pass
+
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "queue.db")
 QUEUE_PAUSED = False
 STALL_TIMEOUT_SECONDS = int(os.environ.get('STALL_TIMEOUT_SECONDS', 300))
@@ -54,6 +63,7 @@ def add_to_queue(link, fmt, title=None):
     )
     conn.commit()
     conn.close()
+    emit_queue_update()
 
 def get_queue_status():
     conn = get_db_connection()
@@ -64,6 +74,7 @@ def get_queue_status():
 def set_pause(paused):
     global QUEUE_PAUSED
     QUEUE_PAUSED = paused
+    emit_queue_update()
     return QUEUE_PAUSED
 
 def cancel_current_task(task_id):
@@ -87,6 +98,7 @@ def swap_queue_positions(first_id, second_id):
     conn.execute("UPDATE queue SET position = ? WHERE id = ?", (pos_map[second_id], first_id))
     conn.commit()
     conn.close()
+    emit_queue_update()
     return True
 
 def move_queue_item(task_id, direction):
@@ -123,6 +135,7 @@ def update_status(task_id, status, title=None, progress=None):
     conn.execute(query, tuple(params))
     conn.commit()
     conn.close()
+    emit_queue_update("queue_progress" if status == "processing" else "queue_update")
 
 def extract_percentage(logs):
     if not logs: return None
@@ -405,6 +418,7 @@ def _handle_failure(task_id: int, error_msg: str, max_retries: Optional[int] = N
             conn.execute("UPDATE queue SET status = ?, progress = ?, failed_attempts = ? WHERE id = ?", ('dead', error_msg, attempts + 1, task_id))
             conn.commit()
             conn.close()
+            emit_queue_update()
             print(f"[QUEUE] Task #{task_id} moved to dead-letter: {error_msg}")
             return
 
@@ -416,6 +430,7 @@ def _handle_failure(task_id: int, error_msg: str, max_retries: Optional[int] = N
                      ('pending', f"Retry in {backoff}s", attempts, next_try, task_id))
         conn.commit()
         conn.close()
+        emit_queue_update()
         print(f"[QUEUE] Task #{task_id} scheduled to retry in {backoff}s (attempt {attempts}/{max_retries})")
     except Exception as e:
         print(f"[QUEUE] Error handling failure for task {task_id}: {e}")
