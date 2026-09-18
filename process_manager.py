@@ -1,0 +1,562 @@
+import subprocess
+import threading
+import os
+import re
+import time
+import platform
+import signal
+from pathlib import Path
+from collections import deque
+from .utils import strip_ansi, analyze_label_metadata, generate_m3u_playlist, fetch_metadata, normalize_media_item
+
+APP_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_path(raw_value, default_value):
+    if raw_value:
+        candidate = Path(raw_value)
+        if not candidate.is_absolute():
+            candidate = (APP_ROOT / candidate).resolve(strict=False)
+        return candidate.resolve(strict=False)
+    candidate = Path(default_value)
+    if not candidate.is_absolute():
+        candidate = (APP_ROOT / candidate).resolve(strict=False)
+    return candidate.resolve(strict=False)
+
+
+def get_wrapper_bin_path():
+    configured = os.environ.get("WRAPPER_BIN")
+    candidates = []
+    if configured:
+        candidates.append(resolve_path(configured, "/app/wrapper"))
+    candidates.extend([
+        resolve_path("/app/wrapper", "/app/wrapper"),
+        resolve_path("/app/wrapper/wrapper", "/app/wrapper/wrapper"),
+        (APP_ROOT / "wrapper").resolve(strict=False),
+        (APP_ROOT / "wrapper" / "wrapper").resolve(strict=False),
+    ])
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return resolve_path(os.environ.get("WRAPPER_BIN", "/app/wrapper"), "/app/wrapper")
+
+
+def get_wrapper_rootfs_path():
+    configured = os.environ.get("WRAPPER_ROOTFS")
+    return resolve_path(configured, "/app/rootfs")
+
+
+def get_wrapper_cache_dir():
+    configured = os.environ.get("WRAPPER_CACHE_DIR")
+    cache_dir = resolve_path(configured, "/app/config/wrapper")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+class ProcessManager:
+    def __init__(self):
+        self.process = None
+        self.running = False
+        self.logs = deque(maxlen=300)
+        self.needs_input = False
+        self.input_options = []
+        self.selection_id = None
+        self._lock = threading.Lock()
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _log(self, message):
+        with self._lock:
+            self.logs.append(message)
+
+    def stop(self):
+        if self.process:
+            try:
+                # Try graceful termination first
+                try:
+                    self.process.terminate()
+                except Exception:
+                    pass
+                try:
+                    self.process.wait(timeout=2)
+                except Exception:
+                    # On Windows try CTRL_BREAK for process group if created
+                    if platform.system() == 'Windows':
+                        try:
+                            self.process.send_signal(signal.CTRL_BREAK_EVENT)
+                        except Exception:
+                            pass
+                    try:
+                        self.process.kill()
+                    except Exception:
+                        pass
+            except:
+                pass
+        with self._lock:
+            self.running = False
+            self.needs_input = False
+        self._log(">>> Processo interrompido <<<")
+
+    def write_input(self, text):
+        with self._lock:
+            proc = self.process
+            running = self.running
+        if proc and running and proc.poll() is None and getattr(proc, 'stdin', None) is not None:
+            try:
+                proc.stdin.write(f"{text}\n")
+                proc.stdin.flush()
+                self._log(f">>> Input enviado: {text}")
+                with self._lock:
+                    self.needs_input = False
+                return True
+            except Exception:
+                return False
+        return False
+
+    def close_stdin(self):
+        with self._lock:
+            proc = self.process
+            running = self.running
+        if proc and running:
+            try:
+                proc.stdin.close()
+                with self._lock:
+                    self.needs_input = False
+                return True
+            except Exception:
+                return False
+        return False
+
+    def get_status(self):
+        # Verifica se o processo morreu silenciosamente
+        with self._lock:
+            if self.process and self.process.poll() is not None:
+                self.running = False
+            return {
+                "running": self.running,
+                "logs": list(self.logs),
+                "needs_input": self.needs_input,
+                "options": self.input_options,
+                "request_id": self.selection_id,
+                "selection_id": self.selection_id,
+                "last_output_at": getattr(self, 'last_output_at', None)
+            }
+
+class WrapperManager(ProcessManager):
+    def __init__(self):
+        super().__init__()
+        self.last_output_at = None
+        self.needs_2fa = False
+        self.cached_2fa_attempt = False
+
+    def _set_2fa_state(self, enabled):
+        with self._lock:
+            self.needs_2fa = bool(enabled)
+            if not enabled:
+                self.cached_2fa_attempt = False
+
+    def _looks_like_2fa_prompt(self, text):
+        lower = text.lower()
+        if not lower:
+            return False
+
+        if re.search(r"\b2fa\s*:\s*(true|yes|requested|required)\b", lower):
+            return True
+
+        has_2fa_signal = any(token in lower for token in [
+            "2fa", "otp", "one-time", "verification code", "authentication code",
+            "enter the code", "verify code", "security code"
+        ])
+        if not has_2fa_signal:
+            return False
+
+        auth_context = any(token in lower for token in [
+            "credentialhandler", "credential handler", "auth", "authenticate",
+            "login", "verification", "verify", "code"
+        ])
+        return auth_context
+
+    def start(self, email, password):
+        if self.running: return False
+
+        wrapper_path = get_wrapper_bin_path()
+        rootfs_dir = get_wrapper_rootfs_path()
+
+        if not wrapper_path.exists() or not wrapper_path.is_file():
+            self._log(f"Erro Wrapper: binary not found at {wrapper_path}")
+            return False
+        if not rootfs_dir.exists() or not rootfs_dir.is_dir():
+            self._log(f"Erro Wrapper: rootfs not found at {rootfs_dir}")
+            return False
+
+        cmd = [str(wrapper_path), "-L", f"{email}:{password}"]
+
+        try:
+            env = os.environ.copy()
+            env["TERM"] = "dumb"
+            env.setdefault("WRAPPER_BIN", str(wrapper_path))
+            env.setdefault("WRAPPER_ROOTFS", str(rootfs_dir))
+            env.setdefault("WRAPPER_CACHE_DIR", str(get_wrapper_cache_dir()))
+            kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          stdin=subprocess.PIPE, bufsize=1, universal_newlines=True,
+                          cwd=str(APP_ROOT), env=env)
+            if platform.system() == 'Windows':
+                kwargs.update(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                kwargs.update(preexec_fn=os.setsid)
+            self.process = subprocess.Popen(cmd, **kwargs)
+            with self._lock:
+                self.running = True
+                self.needs_2fa = False
+                self.logs.clear()
+                self.logs.append("Iniciando Wrapper...")
+            threading.Thread(target=self._stream_logs, daemon=True).start()
+            return True
+        except Exception as e:
+            self._log(f"Erro Wrapper: {e}")
+            return False
+
+    def _stream_logs(self):
+        try:
+            while True:
+                if not self.process:
+                    break
+                line = self.process.stdout.readline()
+                if line == '' or line is None:
+                    break
+                line = line.strip()
+                if not line:
+                    if self.process.poll() is not None:
+                        break
+                    continue
+                clean = strip_ansi(line)
+                self._log(line)
+                clean_lower = clean.lower()
+
+                if self._looks_like_2fa_prompt(clean):
+                    self._set_2fa_state(True)
+                    self._log(">>> 2FA NECESSÁRIO - Digite o código <<<")
+
+                if any(token in clean_lower for token in [
+                    "response type 6", "authentication successful", "logged in successfully",
+                    "login successful", "2fa verified", "verified successfully"
+                ]):
+                    self._set_2fa_state(False)
+
+                # Detecta falhas de conexão (network, timeout, etc)
+                if any(err in clean_lower for err in ["network", "timeout", "connection refused", "connection reset", "offline", "unreachable"]):
+                    self._log(">>> Queda de internet detectada - Tentando reconectar offline <<<")
+        finally:
+            with self._lock:
+                self.running = False
+                if self.process is None or self.process.poll() is not None:
+                    self.needs_2fa = False
+
+class DownloaderManager(ProcessManager):
+    def __init__(self):
+        super().__init__()
+        self.current_format = "alac"
+        self.is_playlist = False
+        # Pré-compila Regex para performance
+        self.re_table = re.compile(r"^\s*\|\s*(\d+)\s*\|")
+        self.re_list = re.compile(r"(?:^|\s|\[\w+\]\s+)(\d+)\s*[\.\:\-\)\]]\s+(.+)$")
+        self.selection_keywords = [
+            "select:", "select one option", "select an option", "select one option from the list",
+            "enter choice", "choice:", "selection:",
+            "select item", "select items", "select a number", "enter a number",
+            "choose:", "choose a number", "selecione", "escolha",
+            "please select", "select from", "select all",
+            "options separated", "ranges supported"
+        ]
+        self.re_date = re.compile(r"\b(\d{4}([-/.]\d{2}([-/.]\d{2})?)?)\b")
+        self.re_duration = re.compile(r"\b(\d{1,3}:\d{2}(?::\d{2})?)\b")
+        self.re_track_count = re.compile(r"\b(\d{1,3})\s*(?:tracks?|songs?|items?|faixas?)\b", re.IGNORECASE)
+
+    def _split_table_row(self, clean):
+        # Support unicode box drawing table separators (│)
+        normalized = clean.replace("│", "|")
+        if "|" not in normalized:
+            return None
+        cells = [c.strip() for c in normalized.strip().strip("|").split("|")]
+        if not cells or not cells[0].isdigit():
+            return None
+        return cells
+
+    def _extract_table_metadata(self, cells):
+        entry_id = cells[0]
+        columns = cells[1:]
+        if not columns:
+            return None
+
+        label = columns[0]
+        date = ""
+        kind = ""
+        is_live = False
+        duration = ""
+        track_count = None
+        extras = []
+
+        for col in columns[1:]:
+            if not date and self.re_date.search(col):
+                date = col.strip()
+                continue
+            if not duration and self.re_duration.search(col):
+                duration = col.strip()
+                continue
+            count_match = self.re_track_count.search(col)
+            if track_count is None and count_match:
+                track_count = int(count_match.group(1))
+                continue
+            if not kind and any(t in col.lower() for t in ["album", "single", "ep", "compilation", "playlist", "song", "music video", "video"]):
+                kind = col.strip()
+                continue
+            if any(t in col.lower() for t in ["live", "concert"]):
+                is_live = True
+                continue
+            extras.append(col.strip())
+
+        normalized = normalize_media_item({
+            "id": entry_id,
+            "type": kind or "unknown",
+            "attributes": {
+                "name": label,
+                "releaseDate": date,
+                "track_count": track_count,
+                "duration": duration,
+                "isLive": is_live,
+            }
+        })
+        normalized["tags"] = analyze_label_metadata(label)["tags"]
+        normalized["extra"] = ", ".join([e for e in extras if e])
+        return normalized
+
+    def start(self, link, args=None):
+        if self.running: return False
+        
+        amd_dir = os.path.join(self.base_dir, "apple-music-downloader")
+        # Ensure the Go project folder exists before attempting to run it
+        if not os.path.isdir(amd_dir):
+            self._log(f"Erro Downloader: apple-music-downloader folder not found at {amd_dir}")
+            return False
+
+        cmd = ["go", "run", "main.go"]
+        self.current_format = "alac"
+        
+        if args: 
+            cmd.extend(args)
+            if "--atmos" in args: self.current_format = "atmos"
+            elif "--aac" in args: self.current_format = "aac"
+            
+        cmd.append(link)
+        
+        # Check Playlist
+        self.is_playlist = False
+        try:
+            meta = fetch_metadata(link)
+            if meta and meta.get('type') == 'Playlist':
+                self.is_playlist = True
+        except: pass
+        
+        try:
+            # Ensure diagnostic log exists and reset it at start
+            try:
+                data_dir = os.path.join(self.base_dir, "data")
+                os.makedirs(data_dir, exist_ok=True)
+                with open(os.path.join(data_dir, "current_task.log"), "w", encoding="utf-8") as f:
+                    f.write(f"--- Starting download: {link} at {time.ctime()} ---\n")
+            except Exception:
+                pass
+
+            # initialize last_output_at to now so the stall detector has a baseline
+            try:
+                self.last_output_at = time.time()
+            except Exception:
+                pass
+            env = os.environ.copy()
+            env["TERM"] = "dumb"
+            kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          stdin=subprocess.PIPE, bufsize=1, universal_newlines=True,
+                          cwd=amd_dir, env=env)
+            if platform.system() == 'Windows':
+                kwargs.update(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                kwargs.update(preexec_fn=os.setsid)
+            self.process = subprocess.Popen(cmd, **kwargs)
+            with self._lock:
+                self.running = True
+                self.needs_input = False
+                self.input_options = []
+                self.selection_id = None
+                self.logs.clear()
+                self.logs.append(f"Iniciando: {link}")
+            threading.Thread(target=self._stream_logs, daemon=True).start()
+            return True
+        except Exception as e:
+            self._log(f"Erro Downloader: {e}")
+            return False
+
+    def _parse_options(self, buffer):
+        options = []
+        # Analisa os últimos logs em busca de tabelas ou listas
+        for line in reversed(buffer[-50:]):
+            clean = strip_ansi(line).strip()
+            if not clean or any(k in clean.lower() for k in self.selection_keywords):
+                continue
+            # Ignore table separators (ASCII or unicode box drawing)
+            if "+---" in clean or "ALBUM NAME" in clean or "─" in clean or "┼" in clean or "┌" in clean or "└" in clean:
+                continue
+
+            # Tenta Tabela
+            m = self.re_table.search(clean)
+            if m:
+                cells = self._split_table_row(clean)
+                parsed = self._extract_table_metadata(cells) if cells else None
+                if parsed:
+                    options.insert(0, parsed)
+                continue
+
+            # Tenta Lista
+            m = self.re_list.search(clean)
+            if m:
+                label = m.group(2).strip()
+                normalized = normalize_media_item({
+                    "id": m.group(1),
+                    "type": "unknown",
+                    "attributes": {"name": label}
+                })
+                normalized["tags"] = analyze_label_metadata(label)["tags"]
+                normalized["duration"] = ""
+                options.insert(0, normalized)
+        return options
+
+    def _merge_options(self, candidates):
+        merged = []
+        seen = set()
+        for option in list(candidates or []):
+            key = (option.get('id'), option.get('label'))
+            if key and key not in seen:
+                merged.append(option)
+                seen.add(key)
+        return merged
+
+    def _stream_logs(self):
+        log_buffer = []
+        try:
+            while True:
+                if not self.process:
+                    break
+                line = self.process.stdout.readline()
+                if line == '' or line is None:
+                    break
+                line = line.strip()
+                if not line:
+                    if self.process.poll() is not None:
+                        break
+                    continue
+
+                # record timestamp of last output and persist raw line for diagnostics
+                try:
+                    self.last_output_at = time.time()
+                    data_dir = os.path.join(self.base_dir, "data")
+                    os.makedirs(data_dir, exist_ok=True)
+                    with open(os.path.join(data_dir, "current_task.log"), "a", encoding="utf-8") as f:
+                        f.write(line + "\n")
+                except Exception:
+                    # best-effort only; never crash the log loop
+                    pass
+
+                self._log(line)
+                log_buffer.append(line)
+                clean_line = strip_ansi(line).lower()
+
+                if any(marker in clean_line for marker in [
+                    "error detected, press enter",
+                    "press enter to try again",
+                    "failed to run v4:",
+                    "key retrieval failed",
+                    "invalid ckc"
+                ]):
+                    self._log(">>> ERRO DETECTADO, encerrando entrada interativa <<<")
+                    self.close_stdin()
+
+                # Detecção de Input
+                if any(k in clean_line for k in self.selection_keywords):
+                    with self._lock:
+                        self.needs_input = True
+                        self.selection_id = self.selection_id or f"selection-{int(time.time() * 1000)}"
+                    
+                    # Try to parse options immediately
+                    options = self._parse_options(log_buffer)
+                    if options:
+                        with self._lock:
+                            self.input_options = options
+                        self._log(">>> AGUARDANDO SELEÇÃO DO USUÁRIO <<<")
+                        # Emit Socket.IO event to notify frontend of selection required
+                        try:
+                            from . import socketio
+                            socketio.emit('selection_required', {
+                                'options': options,
+                                'options_count': len(options),
+                                'selection_id': self.selection_id,
+                                'request_id': self.selection_id
+                            }, skip_sid=True)
+                        except Exception as e:
+                            self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
+                    else:
+                        # Options will come in next lines, wait for them
+                        self._log(">>> PROMPT DETECTADO, AGUARDANDO OPÇÕES <<<")
+
+                # If prompt arrived before options, keep retrying as new lines arrive
+                if self.needs_input:
+                    retry_options = self._parse_options(log_buffer)
+                    if retry_options:
+                        merged = self._merge_options(self.input_options + retry_options)
+                        with self._lock:
+                            self.input_options = merged
+                        self._log(">>> OPÇÕES DETECTADAS, AGUARDANDO SELEÇÃO <<<")
+                        try:
+                            from . import socketio
+                            socketio.emit('selection_required', {
+                                'options': merged,
+                                'options_count': len(merged),
+                                'selection_id': self.selection_id,
+                                'request_id': self.selection_id
+                            }, skip_sid=True)
+                        except Exception as e:
+                            self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
+
+                        
+        finally:
+            with self._lock:
+                self.running = False
+            if self.is_playlist:
+                time.sleep(1)
+                generate_m3u_playlist(self.current_format)
+
+    def is_complete(self):
+        """Detecta fim do download mesmo se subprocesso não sair graciosamente"""
+        if self.process is None:
+            return True
+        
+        # FIX 1: Verifica se processo terminou
+        if self.process.poll() is not None:
+            return True
+        
+        # FIX 2: Timeout de 2h (7200s) desde último output
+        if hasattr(self, 'last_output_at') and time.time() - self.last_output_at > 7200:
+            self._log("Download timeout - marking complete")
+            return True
+        
+        # FIX 3: Procura padrões de conclusão nos logs
+        log_text = ' '.join(self.logs[-20:]).lower()
+        complete_patterns = [
+            'download complete', 'all tracks processed', 'finished', 
+            'total downloaded', 'process finished', 'exit status 0'
+        ]
+        for pattern in complete_patterns:
+            if pattern in log_text:
+                self._log(f"Download completion detected: {pattern}")
+                return True
+        
+        return False
+
+wrapper = WrapperManager()
+downloader = DownloaderManager()
