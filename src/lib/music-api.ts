@@ -93,7 +93,6 @@ export function connectMusicSocket(handlers: {
   socket.on("connect", () => handlers.onConnect(true));
   socket.on("disconnect", () => handlers.onConnect(false));
   socket.on("connect_error", () => handlers.onConnect(false));
-  socket.on("queue_state", handlers.onState);
   socket.on("queue_update", handlers.onQueueChange);
   socket.on("queue_progress", handlers.onQueueChange);
   socket.on("selection_required", handlers.onSelection);
