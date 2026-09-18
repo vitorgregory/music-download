@@ -48,7 +48,7 @@ export type MusicState = {
 };
 export type Metadata = { title?: string; type?: string; image?: string };
 
-const configuredBase = (import.meta.env.VITE_MUSIC_DOWNLOAD_API_URL as string | undefined)?.replace(/\/$/, "");
+const configuredBase = (import.meta.env['VITE_MUSIC_DOWNLOAD_API_URL'] as string | undefined)?.replace(/\/$/, "");
 export const musicApiBase = configuredBase ?? "";
 let csrfToken = "";
 
