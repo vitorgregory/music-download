@@ -13,10 +13,20 @@ export type BackendState = {
   queue: { items: BackendQueueItem[]; paused: boolean };
 };
 
+let csrfToken = "";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = init?.method?.toUpperCase() ?? "GET";
+  if (method !== "GET" && !csrfToken) {
+    const csrfResponse = await fetch("/api/csrf", { credentials: "include" });
+    if (csrfResponse.ok) csrfToken = ((await csrfResponse.json()) as { csrf_token?: string }).csrf_token ?? "";
+  }
+  const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", ...init?.headers });
+  if (csrfToken && method !== "GET") headers.set("X-CSRFToken", csrfToken);
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded", ...init?.headers },
     ...init,
+    headers,
+    credentials: "include",
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.message || "Não foi possível comunicar com o backend.");
