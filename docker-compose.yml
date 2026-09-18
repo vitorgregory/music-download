@@ -1,3 +1,32 @@
+name: music-download
+
+x-casaos:
+  id: com.vitorgregory.music-download
+  main: music-download
+  index: /
+  port_map: "5000"
+  scheme: http
+  icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/apple-music.png
+  title:
+    en_US: Music Download
+    pt_BR: Music Download
+  tagline:
+    en_US: Apple Music download manager
+    pt_BR: Gerenciador de downloads do Apple Music
+  description:
+    en_US: Manage Apple Music downloads from a web interface.
+    pt_BR: Gerencie downloads do Apple Music por uma interface web.
+  author: Vitor Gregory
+  developer: Vitor Gregory
+  category: Media
+  architectures:
+    - amd64
+  version: "1.0.0"
+  update_at: "2026-09-18"
+  release_notes:
+    en_US: Initial ZimaOS custom-app manifest.
+    pt_BR: Manifesto inicial para app personalizado do ZimaOS.
+
 services:
   music-download:
     image: ghcr.io/vitorgregory/music-download:latest
