@@ -62,6 +62,7 @@ export function DownloadDashboard() {
     const socket = connectMusicSocket({
       onConnect: setConnected,
       onState: (next) => { setState(next); setConnected(true); },
+      onQueueChange: () => { void refresh(); },
       onSelection: (data) => openSelection(data.options ?? [], data.selection_id ?? data.request_id),
     });
     return () => { window.clearInterval(timer); socket.disconnect(); };

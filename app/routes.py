@@ -1,5 +1,6 @@
 from pathlib import Path
 from flask import render_template, request, jsonify
+from flask_wtf.csrf import generate_csrf
 from urllib.parse import urlparse, parse_qs
 from . import app, limiter, csrf
 from .process_manager import wrapper, downloader, get_wrapper_bin_path, get_wrapper_cache_dir, get_wrapper_rootfs_path
@@ -127,6 +128,11 @@ def settings():
     return render_template("settings.html")
 
 # --- API ---
+
+@app.route("/api/csrf", methods=["GET"])
+@limiter.exempt
+def get_csrf():
+    return jsonify({"csrf_token": generate_csrf()})
 
 @app.route("/api/state", methods=["GET"])
 @limiter.exempt

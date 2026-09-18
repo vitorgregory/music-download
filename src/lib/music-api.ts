@@ -86,6 +86,7 @@ export const musicApi = {
 export function connectMusicSocket(handlers: {
   onConnect: (connected: boolean) => void;
   onState: (state: MusicState) => void;
+  onQueueChange: () => void;
   onSelection: (data: { options?: SelectionOption[]; selection_id?: string; request_id?: string }) => void;
 }): Socket {
   const socket = io(musicApiBase || undefined, { transports: ["websocket", "polling"], withCredentials: true });
@@ -93,7 +94,8 @@ export function connectMusicSocket(handlers: {
   socket.on("disconnect", () => handlers.onConnect(false));
   socket.on("connect_error", () => handlers.onConnect(false));
   socket.on("queue_state", handlers.onState);
-  socket.on("queue_update", handlers.onState);
+  socket.on("queue_update", handlers.onQueueChange);
+  socket.on("queue_progress", handlers.onQueueChange);
   socket.on("selection_required", handlers.onSelection);
   return socket;
 }
