@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Zima Music — Fila de downloads</title>
+    <meta name="description" content="Analise links do Apple Music e acompanhe downloads em ALAC, AAC e Atmos.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="{{ static_asset('style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body class="ops-body">
+    <a href="#main-content" class="skip-link">Pular para o conteúdo</a>
+
+    <aside class="ops-sidebar" aria-label="Navegação principal">
+        <a class="ops-brand" href="/" aria-label="Zima Music — Downloads">
+            <span class="ops-brand-icon"><i class="fas fa-headphones" aria-hidden="true"></i></span>
+            <span class="ops-brand-copy"><strong>Zima</strong><small>Music</small></span>
+        </a>
+        <nav class="ops-nav">
+            <a href="/" class="ops-nav-link active" aria-current="page" title="Downloads">
+                <i class="fas fa-arrow-down" aria-hidden="true"></i><span>Downloads</span>
+            </a>
+            <a href="/settings" class="ops-nav-link" title="Configurações">
+                <i class="fas fa-sliders" aria-hidden="true"></i><span>Configurações</span>
+            </a>
+        </nav>
+        <div class="ops-sidebar-foot">
+            <button class="ops-nav-link ops-nav-button" type="button" onclick="toggleLogs()" title="Logs do sistema">
+                <i class="fas fa-terminal" aria-hidden="true"></i><span>Logs</span>
+            </button>
+        </div>
+    </aside>
+
+    <div class="ops-workspace">
+        <header class="ops-header">
+            <div class="ops-heading">
+                <p class="ops-eyebrow">Central de operações</p>
+                <h1>Downloads</h1>
+            </div>
+            <div class="ops-header-actions">
+                <span class="status-chip" id="wrapper-status-chip" title="Estado da conexão com o wrapper">
+                    <span id="wrapper-status-dot" class="status-dot" aria-hidden="true"></span>
+                    <span id="wrapper-status-text" class="status-chip-text">Verificando…</span>
+                </span>
+                <button id="nav-login-btn" class="btn btn-sm btn-accent d-none" type="button">
+                    <i class="fas fa-plug" aria-hidden="true"></i><span>Conectar</span>
+                </button>
+                <button class="btn btn-icon" type="button" onclick="toggleLogs()" aria-label="Abrir logs" title="Logs do sistema">
+                    <i class="fas fa-terminal" aria-hidden="true"></i>
+                </button>
+            </div>
+        </header>
+
+        <main id="main-content" class="ops-main">
+            <div id="install-warnings" aria-live="polite"></div>
+            <div id="connection-banner" class="connection-banner d-none" role="alert">
+                <i class="fas fa-wifi" aria-hidden="true"></i>
+                <div><strong>Não foi possível atualizar a fila.</strong><span>Verifique a conexão; uma nova tentativa será feita automaticamente.</span></div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fetchState()">Tentar agora</button>
+            </div>
+
+            <section class="analyze-tool" aria-labelledby="analyze-title">
+                <div class="tool-heading">
+                    <div>
+                        <p class="ops-eyebrow">Novo download</p>
+                        <h2 id="analyze-title">Analisar link do Apple Music</h2>
+                    </div>
+                    <p>Álbuns, músicas, playlists, artistas e vídeos</p>
+                </div>
+                <div class="analyze-grid">
+                    <div class="link-field">
+                        <label for="link-box">URL do Apple Music</label>
+                        <div class="search-shell">
+                            <i class="fas fa-link search-shell-icon" aria-hidden="true"></i>
+                            <input id="link-box" class="form-control search-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://music.apple.com/…" aria-describedby="link-help">
+                            <button id="analyze-btn" class="btn btn-accent search-shell-btn" type="button">
+                                <i class="fas fa-magnifying-glass" aria-hidden="true"></i><span>Analisar</span>
+                            </button>
+                        </div>
+                        <span id="link-help" class="form-hint">Cole o link e pressione Enter.</span>
+                    </div>
+                    <fieldset class="quality-fieldset">
+                        <legend>Formato</legend>
+                        <div class="format-segmented" role="radiogroup" aria-label="Formato do download">
+                            <label class="quality-opt"><input type="radio" name="dl_quality" value="alac" checked><span class="opt-box"><strong>ALAC</strong><small>Lossless</small></span></label>
+                            <label class="quality-opt"><input type="radio" name="dl_quality" value="aac"><span class="opt-box"><strong>AAC</strong><small>256 kbps</small></span></label>
+                            <label class="quality-opt"><input type="radio" name="dl_quality" value="atmos"><span class="opt-box"><strong>Atmos</strong><small>Spatial</small></span></label>
+                        </div>
+                    </fieldset>
+                </div>
+
+                <div id="preview-skeleton" class="preview-inline preview-skeleton d-none" aria-hidden="true">
+                    <div class="sk-box sk-thumb"></div><div class="flex-grow-1"><div class="sk-box sk-line w-75 mb-2"></div><div class="sk-box sk-line w-50"></div></div>
+                </div>
+                <div id="preview-area" class="preview-inline d-none" aria-live="polite">
+                    <img id="preview-img" src="" alt="" class="preview-thumb">
+                    <div class="preview-copy"><h3 id="preview-title">…</h3><div><span id="preview-type" class="badge badge-soft">Link</span><small>Pronto para adicionar</small></div></div>
+                    <button id="download-btn" type="button" class="btn btn-accent"><i class="fas fa-plus" aria-hidden="true"></i><span>Adicionar à fila</span></button>
+                </div>
+            </section>
+
+            <section class="queue-overview" aria-label="Resumo da fila">
+                <div class="metric"><span class="metric-icon metric-active"><i class="fas fa-wave-square"></i></span><div><strong id="metric-active">0</strong><span>Ativos</span></div></div>
+                <div class="metric"><span class="metric-icon metric-done"><i class="fas fa-check"></i></span><div><strong id="metric-completed">0</strong><span>Concluídos</span></div></div>
+                <div class="metric"><span class="metric-icon metric-failed"><i class="fas fa-triangle-exclamation"></i></span><div><strong id="metric-failed">0</strong><span>Com falha</span></div></div>
+                <div class="metric"><span class="metric-icon metric-paused"><i class="fas fa-pause"></i></span><div><strong id="metric-paused">0</strong><span>Pausados</span></div></div>
+            </section>
+
+            <section class="queue-section" aria-labelledby="queue-title">
+                <div class="queue-heading">
+                    <div><p class="ops-eyebrow">Tempo real</p><h2 id="queue-title">Fila de downloads</h2></div>
+                    <div class="queue-controls">
+                        <div class="queue-tabs" role="tablist" aria-label="Visualização da fila">
+                            <button class="active" id="active-tab" data-bs-toggle="pill" data-bs-target="#pills-active" type="button" role="tab">Em andamento <span id="count-active">0</span></button>
+                            <button id="history-tab" data-bs-toggle="pill" data-bs-target="#pills-history" type="button" role="tab">Histórico <span id="count-history">0</span></button>
+                        </div>
+                        <button id="pause-btn" class="btn btn-outline-warning btn-sm" type="button"><i class="fas fa-pause" aria-hidden="true"></i><span>Pausar fila</span></button>
+                    </div>
+                </div>
+                <div id="queue-paused-banner" class="paused-banner d-none" role="status"><i class="fas fa-circle-pause"></i><span><strong>Fila pausada.</strong> Os itens pendentes aguardam até você retomar.</span></div>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="pills-active" role="tabpanel" aria-labelledby="active-tab">
+                        <div class="queue-table-container"><table class="table queue-table align-middle mb-0"><caption class="visually-hidden">Downloads ativos e pendentes</caption><thead><tr><th>Tarefa</th><th>Status</th><th>Progresso</th><th>Formato</th><th>Tentativa</th><th class="text-end">Ações</th></tr></thead><tbody id="queue-table-active"><tr><td colspan="6" class="p-0"><div class="empty-state"><i class="fas fa-compact-disc"></i><p>Nenhum download ativo</p><span>Cole um link acima para começar.</span></div></td></tr></tbody></table></div>
+                    </div>
+                    <div class="tab-pane fade" id="pills-history" role="tabpanel" aria-labelledby="history-tab">
+                        <div class="queue-table-container"><table class="table queue-table align-middle mb-0"><caption class="visually-hidden">Histórico de downloads</caption><thead><tr><th>Tarefa</th><th>Status</th><th>Progresso</th><th>Formato</th><th>Tentativa</th><th class="text-end">Ações</th></tr></thead><tbody id="queue-table-history"><tr><td colspan="6" class="p-0"><div class="empty-state"><i class="fas fa-clock-rotate-left"></i><p>Histórico vazio</p><span>Downloads concluídos ou cancelados aparecerão aqui.</span></div></td></tr></tbody></table></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="log-drawer" class="log-drawer" aria-label="Logs do sistema" aria-hidden="true">
+        <div class="drawer-head"><div><p class="ops-eyebrow">Diagnóstico</p><h2>Logs do sistema</h2></div><button class="btn btn-icon" type="button" onclick="toggleLogs()" aria-label="Fechar logs"><i class="fas fa-xmark"></i></button></div>
+        <div class="drawer-actions"><button id="login-btn" class="btn btn-sm btn-outline-light" type="button">Login do wrapper</button><button id="stop-wrapper-btn" class="btn btn-sm btn-outline-danger d-none" type="button">Parar wrapper</button></div>
+        <div class="log-grid"><div><span class="log-title">Wrapper</span><div id="wrapper-logs" class="log-box"></div></div><div><span class="log-title">Downloader</span><div id="downloader-logs" class="log-box"></div></div></div>
+        <div id="login-form" class="d-none drawer-login"><h3>Conectar ao wrapper</h3><p>Use sua conta Apple para autorizar os downloads.</p><label for="email">Email</label><input id="email" class="form-control" type="email" autocomplete="username"><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" class="form-control"><div><button type="button" class="btn btn-outline-light" onclick="document.getElementById('login-form').classList.add('d-none')">Cancelar</button><button id="submit-login" class="btn btn-accent" type="button">Conectar</button></div></div>
+    </div>
+    <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeAllDrawers()" hidden></div>
+
+    <aside id="task-drawer" class="task-drawer" aria-hidden="true" aria-labelledby="task-drawer-title">
+        <div class="drawer-head"><div><p class="ops-eyebrow">Detalhes da tarefa</p><h2 id="task-drawer-title">Download</h2></div><button class="btn btn-icon" type="button" onclick="closeTaskDrawer()" aria-label="Fechar detalhes"><i class="fas fa-xmark"></i></button></div>
+        <div id="task-drawer-content"></div>
+    </aside>
+
+    <div id="selection-area" class="selection-overlay d-none" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="selection-title">
+        <div class="selection-panel">
+            <div class="selection-header"><div><p class="ops-eyebrow">Link de artista</p><h2 id="selection-title">Escolha os releases</h2><span id="selection-summary"></span></div><button id="skip-selection" class="btn btn-icon" type="button" onclick="skipSelection()" aria-label="Pular seleção" title="Pular seleção"><i class="fas fa-xmark"></i></button></div>
+            <div class="selection-body">
+                <div id="selection-error" class="selection-error d-none" role="alert"></div>
+                <div class="selection-toolbar">
+                    <div class="selection-search-wrap"><i class="fas fa-magnifying-glass"></i><label for="selection-search" class="visually-hidden">Buscar releases</label><input id="selection-search" class="form-control selection-input" placeholder="Buscar por título ou edição…"></div>
+                    <label for="selection-type-filter" class="visually-hidden">Tipo</label><select id="selection-type-filter" class="form-select selection-input"><option value="">Todos os tipos</option><option value="album">Álbum</option><option value="ep">EP</option><option value="single">Single</option><option value="music_video">Vídeo musical</option><option value="compilation">Compilação</option><option value="unknown">Tipo desconhecido</option></select>
+                    <label for="selection-year-filter" class="visually-hidden">Ano</label><select id="selection-year-filter" class="form-select selection-input"><option value="">Todos os anos</option></select>
+                    <label for="selection-tag-filter" class="visually-hidden">Edição</label><select id="selection-tag-filter" class="form-select selection-input"><option value="">Todas as edições</option></select>
+                </div>
+                <div class="selection-bulk"><button id="selection-toggle-all" class="btn btn-sm btn-soft" type="button" onclick="toggleAllSelection()"><i class="fas fa-check-double"></i><span>Selecionar resultados visíveis</span></button></div>
+                <div class="selection-table"><table class="table align-middle mb-0"><thead><tr><th><span class="visually-hidden">Selecionar</span></th><th>Release</th><th>Tipo</th><th>Faixas e edição</th><th>Ano</th><th>Duração</th></tr></thead><tbody id="selection-list"></tbody></table></div>
+                <div class="selection-footer"><span id="selection-count-label">Nenhum item selecionado</span><button id="submit-selection" class="btn btn-accent" type="button" disabled><i class="fas fa-check"></i><span>Confirmar seleção</span></button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="twofa-modal" class="d-none position-fixed top-0 start-0 w-100 h-100 modal-backdrop-soft d-flex align-items-center justify-content-center" style="z-index: 4000" role="dialog" aria-modal="true" aria-labelledby="twofa-title"><div class="modal-card p-4 text-center"><div class="modal-icon mb-3"><i class="fas fa-shield-halved"></i></div><h2 id="twofa-title">Código de verificação</h2><p>Digite o código de 6 dígitos enviado ao seu dispositivo Apple.</p><label for="twofa-code" class="visually-hidden">Código 2FA</label><input id="twofa-code" class="form-control text-center code-input mb-3" maxlength="6" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" placeholder="••••••"><button id="submit-2fa" class="btn btn-accent w-100" type="button">Enviar código</button><button id="cancel-2fa" class="btn btn-link btn-sm mt-2" type="button">Cancelar tentativa</button></div></div>
+    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ static_asset('script.js') }}"></script>
+    <script>
+        function toggleLogs() { window.setLogDrawerOpen?.(!document.getElementById('log-drawer').classList.contains('is-open')); }
+        function closeAllDrawers() { window.setLogDrawerOpen?.(false); window.closeTaskDrawer?.(); }
+    </script>
+</body>
+</html>

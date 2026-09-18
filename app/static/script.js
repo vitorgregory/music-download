@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Inicializa controles
     setupEventListeners();
     // Inicia Loop de Estado
+    fetchState();
     setInterval(fetchState, 1500);
     // Inicia detector de queda de internet e reconexão automática
     initializeOfflineDetection();
@@ -89,6 +90,9 @@ function initializeSocketIO() {
 
 let selectionOptions = [];
 let selectionSignature = "";
+let selectedSelectionIds = new Set();
+let latestAppState = null;
+let selectedTaskId = null;
 let selectionState = {
     isOpen: false,
     isSubmitting: false,
@@ -116,6 +120,7 @@ function openArtistSelectionModal(data) {
     selectionState.isOpen = true;
     selectionState.isSubmitting = false;
     selectionState.errorMessage = '';
+    document.getElementById('selection-error')?.classList.add('d-none');
     selectionState.selectionId = requestId;
     if (wasClosed) selectionState.openedBy = document.activeElement;
     selArea.classList.remove('d-none');
@@ -145,6 +150,7 @@ function closeArtistSelectionModal(reason = 'closed') {
 function resetSelectionState() {
     selectionOptions = [];
     selectionSignature = "";
+    selectedSelectionIds.clear();
     document.getElementById('selection-list')?.replaceChildren();
     const search = document.getElementById('selection-search');
     if (search) search.value = '';
@@ -153,12 +159,23 @@ function resetSelectionState() {
 function setArtistSelectionSubmitting(value) {
     selectionState.isSubmitting = !!value;
     const btn = document.getElementById('submit-selection');
-    if (btn) btn.disabled = !!value || !document.querySelector('#selection-list input:checked');
+    if (btn) {
+        btn.disabled = !!value || selectedSelectionIds.size === 0;
+        btn.setAttribute('aria-busy', value ? 'true' : 'false');
+        btn.innerHTML = value
+            ? '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>Enviando seleção…</span>'
+            : `<i class="fas fa-check" aria-hidden="true"></i><span>Confirmar seleção${selectedSelectionIds.size ? ` (${selectedSelectionIds.size})` : ''}</span>`;
+    }
     document.getElementById('skip-selection')?.toggleAttribute('disabled', !!value);
 }
 
 function renderSelectionError(message) {
     selectionState.errorMessage = message || 'Erro ao enviar a seleção.';
+    const errorBox = document.getElementById('selection-error');
+    if (errorBox) {
+        errorBox.textContent = `${selectionState.errorMessage} Revise os itens e tente novamente.`;
+        errorBox.classList.remove('d-none');
+    }
     const btn = document.getElementById('submit-selection');
     if (btn) btn.disabled = !document.querySelector('#selection-list input:checked');
     document.getElementById('skip-selection')?.removeAttribute('disabled');
@@ -270,6 +287,8 @@ async function fetchState() {
     try {
         const res = await axios.get('/api/state');
         const { wrapper, downloader, queue, wrapper_installed, downloader_installed } = res.data;
+        latestAppState = res.data;
+        document.getElementById('connection-banner')?.classList.add('d-none');
 
         // Reset offline retry count on successful connection
         offlineRetryCount = 0;
@@ -285,6 +304,7 @@ async function fetchState() {
         updateWrapperUI(wrapper);
         updateDownloaderUI(downloader);
         updateQueueUI(queue);
+        if (selectedTaskId != null) refreshTaskDrawer();
 
         // Show installation warnings
         const warnContainer = getOrCreateWarnContainer();
@@ -304,6 +324,7 @@ async function fetchState() {
 
     } catch (e) {
         console.error("Sync Error:", e);
+        document.getElementById('connection-banner')?.classList.remove('d-none');
         // Detecta erros de conexão (network error, timeout, etc)
         if (e.code === 'ECONNABORTED' || e.code === 'ENOTFOUND' || e.message.includes('Network') || e.message.includes('timeout')) {
             console.log('[Offline Detection] Erro de conexão detectado - tentando reconectar');
@@ -317,7 +338,7 @@ function getOrCreateWarnContainer() {
     if (!c) {
         c = document.createElement('div');
         c.id = 'install-warnings';
-        const root = document.querySelector('.container');
+        const root = document.querySelector('.ops-main');
         if (root) root.parentNode.insertBefore(c, root);
         else document.body.insertBefore(c, document.body.firstChild);
     }
@@ -399,16 +420,23 @@ function updateQueueUI(q) {
     const pBtn = document.getElementById('pause-btn');
     if (pBtn) {
         pBtn.innerHTML = q.paused
-            ? '<i class="fas fa-play me-1"></i> Retomar'
-            : '<i class="fas fa-pause me-1"></i> Pausar';
-        pBtn.className = q.paused ? 'btn btn-success btn-sm rounded-pill px-3' : 'btn btn-outline-warning btn-sm rounded-pill px-3';
+            ? '<i class="fas fa-play"></i><span>Retomar fila</span>'
+            : '<i class="fas fa-pause"></i><span>Pausar fila</span>';
+        pBtn.className = q.paused ? 'btn btn-success btn-sm' : 'btn btn-outline-warning btn-sm';
         pBtn.title = q.paused ? 'Retomar a fila de downloads' : 'Pausar a fila de downloads';
     }
     document.body.classList.toggle('queue-paused', !!q.paused);
+    document.getElementById('queue-paused-banner')?.classList.toggle('d-none', !q.paused);
 
     // Atualiza badges
     let activeItems = q.items.filter(i => ['pending', 'processing'].includes(i.status));
     let historyItems = q.items.filter(i => !['pending', 'processing'].includes(i.status));
+
+    const failedItems = q.items.filter(i => ['failed', 'dead'].includes(i.status));
+    document.getElementById('metric-active').textContent = activeItems.length;
+    document.getElementById('metric-completed').textContent = q.items.filter(i => i.status === 'completed').length;
+    document.getElementById('metric-failed').textContent = failedItems.length;
+    document.getElementById('metric-paused').textContent = q.paused ? q.items.filter(i => i.status === 'pending').length : 0;
 
     document.getElementById('count-active').innerText = activeItems.length;
     document.getElementById('count-history').innerText = historyItems.length;
@@ -425,14 +453,14 @@ function queueEmptyState(isActiveTab) {
              <div class="empty-state">
                <i class="fas fa-compact-disc" aria-hidden="true"></i>
                <p class="fw-semibold mb-1">Nenhum download ativo</p>
-               <p class="text-muted small mb-0">Cole um link do Apple Music acima para começar.</p>
+               <span>Cole um link do Apple Music acima para começar.</span>
              </div>
            </td></tr>`
         : `<tr><td colspan="6" class="p-0">
              <div class="empty-state">
                <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
                <p class="fw-semibold mb-1">Histórico vazio</p>
-               <p class="text-muted small mb-0">Downloads concluídos ou cancelados aparecem aqui.</p>
+               <span>Downloads concluídos ou cancelados aparecem aqui.</span>
              </div>
            </td></tr>`;
 }
@@ -453,19 +481,20 @@ function renderQueueTable(container, items, isActiveTab) {
         let statusClass = "";
         
         if (item.status === 'processing') { 
-            statusBadge = '<span class="badge status-badge bg-warning text-dark"><i class="fas fa-spinner fa-spin"></i> Processando</span>';
+            statusBadge = '<span class="status-badge status-processing"><i class="fas fa-spinner fa-spin"></i> Processando</span>';
             statusClass = "status-processing";
         } else if (item.status === 'completed') { 
-            statusBadge = '<span class="badge status-badge bg-success"><i class="fas fa-check"></i> Concluído</span>';
+            statusBadge = '<span class="status-badge status-completed"><i class="fas fa-check"></i> Concluído</span>';
             statusClass = "status-completed";
-        } else if (item.status === 'failed') { 
-            statusBadge = '<span class="badge status-badge bg-danger"><i class="fas fa-times"></i> Falha</span>';
+        } else if (item.status === 'failed' || item.status === 'dead') { 
+            statusBadge = `<span class="status-badge status-failed"><i class="fas fa-triangle-exclamation"></i> ${item.status === 'dead' ? 'Falha final' : 'Falha'}</span>`;
             statusClass = "status-failed";
         } else if (item.status === 'cancelled') { 
-            statusBadge = '<span class="badge status-badge bg-danger"><i class="fas fa-ban"></i> Cancelado</span>';
+            statusBadge = '<span class="status-badge status-failed"><i class="fas fa-ban"></i> Cancelado</span>';
             statusClass = "status-failed";
         } else if (item.status === 'pending') { 
-            statusBadge = '<span class="badge status-badge bg-secondary"><i class="fas fa-clock"></i> Na fila</span>';
+            const waitingRetry = Number(item.failed_attempts || 0) > 0;
+            statusBadge = `<span class="status-badge ${waitingRetry ? 'status-paused' : 'status-pending'}"><i class="fas ${waitingRetry ? 'fa-rotate' : 'fa-clock'}"></i> ${waitingRetry ? 'Nova tentativa' : 'Na fila'}</span>`;
             statusClass = "status-pending";
         }
 
@@ -475,43 +504,101 @@ function renderQueueTable(container, items, isActiveTab) {
         // Action buttons
         let actionHtml = "";
         if (item.status === 'processing') {
-            actionHtml = `<button type="button" onclick="stopTask(${item.id})" class="btn btn-sm btn-danger" title="Parar download" aria-label="Parar download ${item.id}"><i class="fas fa-stop-circle"></i></button>`;
+            actionHtml = `<button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do download ${item.id}"><i class="fas fa-table-columns"></i></button><button type="button" onclick="stopTask(${item.id})" class="btn btn-sm btn-outline-danger" title="Parar download" aria-label="Parar download ${item.id}"><i class="fas fa-stop"></i></button>`;
         } else if (item.status === 'pending') {
             actionHtml = `
-                <div class="btn-group btn-group-sm" role="group" aria-label="Ações do item ${item.id}">
+                <div class="queue-actions" role="group" aria-label="Ações do item ${item.id}">
+                    <button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-table-columns"></i></button>
                     <button type="button" onclick="moveTask(${item.id}, 'up')" class="btn btn-outline-secondary" title="Mover para cima" aria-label="Mover item ${item.id} para cima"><i class="fas fa-arrow-up"></i></button>
                     <button type="button" onclick="moveTask(${item.id}, 'down')" class="btn btn-outline-secondary" title="Mover para baixo" aria-label="Mover item ${item.id} para baixo"><i class="fas fa-arrow-down"></i></button>
                     <button type="button" onclick="cancelTask(${item.id}, 'pending')" class="btn btn-outline-danger" title="Cancelar item" aria-label="Cancelar item ${item.id}"><i class="fas fa-ban"></i></button>
                 </div>
             `;
         } else {
-            actionHtml = `<button type="button" onclick="deleteHistory(${item.id})" class="btn btn-sm btn-outline-secondary" title="Remover do histórico" aria-label="Remover item ${item.id} do histórico"><i class="fas fa-trash"></i></button>`;
+            actionHtml = `<div class="queue-actions"><button type="button" onclick="openTaskDrawer(${item.id})" class="btn btn-sm btn-icon" title="Ver detalhes" aria-label="Ver detalhes do item ${item.id}"><i class="fas fa-table-columns"></i></button>${['failed','dead','cancelled'].includes(item.status) ? `<button type="button" onclick="retryTask(${item.id})" class="btn btn-sm btn-outline-secondary" title="Tentar novamente" aria-label="Tentar novamente o item ${item.id}"><i class="fas fa-rotate-right"></i></button>` : ''}<button type="button" onclick="deleteHistory(${item.id})" class="btn btn-sm btn-outline-secondary" title="Remover do histórico" aria-label="Remover item ${item.id} do histórico"><i class="fas fa-trash"></i></button></div>`;
         }
 
-        const formatBadge = `<span class="badge badge-soft">${item.format.toUpperCase()}</span>`;
+        const formatBadge = `<span class="badge-soft">${escapeHtml(String(item.format || 'alac').toUpperCase())}</span>`;
         
         return `
             <tr class="queue-row ${statusClass}">
-                <td data-label="ID"><small class="text-muted">#${item.id}</small></td>
-                <td data-label="Título">
-                    <div class="queue-title" title="${title}"><strong>${title}</strong></div>
-                    <small class="text-muted d-block queue-link" title="${item.link}">${item.link}</small>
+                <td data-label="Tarefa">
+                    <div class="queue-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                    <div class="queue-link" title="${escapeHtml(item.link)}">#${item.id} · ${escapeHtml(item.link)}</div>
                     ${item.existing_path ? `<small class="text-success d-block"><i class="fas fa-check-circle"></i> ${truncatePath(item.existing_path, 40)}</small>` : ''}
                 </td>
                 <td data-label="Status">${statusBadge}</td>
                 <td data-label="Progresso">
                     ${item.status === 'processing' 
-                        ? `<div class="progress" style="height: 20px;" role="progressbar" aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: ${progressPercent}%">${progressDisplay}</div></div>`
-                        : `<small>${progressDisplay}</small>`
+                        ? `<div class="progress-wrap"><div class="progress" role="progressbar" aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: ${progressPercent}%"></div></div><span>${progressDisplay}</span></div>`
+                        : `<small>${escapeHtml(String(item.progress || progressDisplay))}</small>`
                     }
                 </td>
                 <td data-label="Formato">${formatBadge}</td>
+                <td data-label="Tentativa">${Number(item.failed_attempts || 0) + 1}</td>
                 <td data-label="Ações" class="text-lg-end">${actionHtml}</td>
             </tr>
         `;
     }).join('');
 
     container.innerHTML = rows;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+
+window.setLogDrawerOpen = function setLogDrawerOpen(open) {
+    const drawer = document.getElementById('log-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    drawer?.classList.toggle('is-open', !!open);
+    drawer?.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (backdrop) backdrop.hidden = !open && !document.getElementById('task-drawer')?.classList.contains('is-open');
+};
+
+window.openTaskDrawer = function openTaskDrawer(id) {
+    selectedTaskId = Number(id);
+    refreshTaskDrawer();
+    const drawer = document.getElementById('task-drawer');
+    drawer?.classList.add('is-open');
+    drawer?.setAttribute('aria-hidden', 'false');
+    const backdrop = document.getElementById('drawer-backdrop');
+    if (backdrop) backdrop.hidden = false;
+};
+
+window.closeTaskDrawer = function closeTaskDrawer() {
+    selectedTaskId = null;
+    const drawer = document.getElementById('task-drawer');
+    drawer?.classList.remove('is-open');
+    drawer?.setAttribute('aria-hidden', 'true');
+    const backdrop = document.getElementById('drawer-backdrop');
+    if (backdrop) backdrop.hidden = !document.getElementById('log-drawer')?.classList.contains('is-open');
+};
+
+function refreshTaskDrawer() {
+    const item = latestAppState?.queue?.items?.find((entry) => Number(entry.id) === selectedTaskId);
+    const content = document.getElementById('task-drawer-content');
+    if (!item || !content) return;
+    document.getElementById('task-drawer-title').textContent = item.title || `Tarefa #${item.id}`;
+    const progressValue = Number(item.progress);
+    const logs = latestAppState?.downloader?.logs || [];
+    content.innerHTML = `<div class="task-meta"><div><span>Status</span><strong>${escapeHtml(statusLabel(item.status))}</strong></div><div><span>Formato</span><strong>${escapeHtml(String(item.format || '').toUpperCase())}</strong></div><div><span>Progresso</span><strong>${Number.isFinite(progressValue) ? `${progressValue}%` : escapeHtml(item.progress || '—')}</strong></div><div><span>Tentativa</span><strong>${Number(item.failed_attempts || 0) + 1}</strong></div><div><span>Adicionado</span><strong>${escapeHtml(item.created_at || '—')}</strong></div><div><span>Posição</span><strong>${escapeHtml(item.position ?? '—')}</strong></div></div><div class="task-section"><h3>Origem</h3><div class="queue-link">${escapeHtml(item.link)}</div></div><div class="task-section"><h3>Logs recentes</h3><div class="task-log">${escapeHtml(logs.length ? logs.slice(-12).join('\n') : 'Nenhum log recente para esta tarefa.')}</div></div><div class="task-drawer-actions">${item.status === 'processing' ? `<button class="btn btn-outline-danger" onclick="stopTask(${item.id});closeTaskDrawer()"><i class="fas fa-stop"></i>Cancelar download</button>` : ''}${item.status === 'pending' ? `<button class="btn btn-outline-danger" onclick="cancelTask(${item.id},'pending');closeTaskDrawer()"><i class="fas fa-ban"></i>Cancelar item</button>` : ''}${['failed','dead','cancelled'].includes(item.status) ? `<button class="btn btn-accent" onclick="retryTask(${item.id});closeTaskDrawer()"><i class="fas fa-rotate-right"></i>Tentar novamente</button>` : ''}</div>`;
+}
+
+function statusLabel(status) {
+    return ({processing:'Processando', pending:'Na fila', completed:'Concluído', failed:'Falha', dead:'Falha final', cancelled:'Cancelado'})[status] || status || 'Desconhecido';
+}
+
+async function retryTask(id) {
+    const item = latestAppState?.queue?.items?.find((entry) => Number(entry.id) === Number(id));
+    if (!item) return;
+    try {
+        await axios.post('/download', new URLSearchParams({link: item.link, title: item.title, format: item.format}));
+        showToast('Nova tentativa adicionada ao fim da fila.', 'success');
+        await fetchState();
+    } catch (error) {
+        showToast(error?.response?.data?.message || 'Não foi possível tentar novamente.', 'error');
+    }
 }
 
 // New function to remove items from history
@@ -670,7 +757,11 @@ function toggleAllSelection() {
     const boxes = Array.from(document.querySelectorAll('#selection-list input[type="checkbox"]'));
     if (!boxes.length) return;
     const shouldCheck = boxes.some(b => !b.checked);
-    boxes.forEach(b => { b.checked = shouldCheck; });
+    boxes.forEach(b => {
+        b.checked = shouldCheck;
+        if (shouldCheck) selectedSelectionIds.add(String(b.value));
+        else selectedSelectionIds.delete(String(b.value));
+    });
     updateSelectionCount();
     const btn = document.getElementById('selection-toggle-all');
     if (btn) {
@@ -681,13 +772,15 @@ function toggleAllSelection() {
 }
 
 function updateSelectionCount() {
-    const checked = document.querySelectorAll('#selection-list input[type="checkbox"]:checked').length;
+    const checked = selectedSelectionIds.size;
     const btn = document.getElementById('submit-selection');
     if (!btn) return;
     btn.disabled = checked === 0;
     btn.innerHTML = checked
-        ? `<i class="fas fa-check me-2"></i>Confirmar seleção (${checked})`
-        : '<i class="fas fa-check me-2"></i>Selecione ao menos um item';
+        ? `<i class="fas fa-check"></i><span>Confirmar seleção (${checked})</span>`
+        : '<i class="fas fa-check"></i><span>Confirmar seleção</span>';
+    const label = document.getElementById('selection-count-label');
+    if (label) label.textContent = checked ? `${checked} ${checked === 1 ? 'item selecionado' : 'itens selecionados'}` : 'Nenhum item selecionado';
 }
 
 function syncSelectionOptions(opts) {
@@ -826,12 +919,12 @@ function renderSelectionList() {
         return `
         <tr class="selection-row">
             <td data-label="">
-                <input class="form-check-input" type="checkbox" value="${o.id}" id="chk-${o.id}" aria-label="Selecionar ${o.label}" ${selectable ? '' : 'disabled'}>
+                <input class="form-check-input" type="checkbox" value="${o.id}" id="chk-${o.id}" aria-label="Selecionar ${escapeHtml(o.label)}" ${selectedSelectionIds.has(String(o.id)) ? 'checked' : ''} ${selectable ? '' : 'disabled'}>
             </td>
             <td data-label="Título">
                 <label class="form-check-label selection-label" for="chk-${o.id}">
-                    <div class="fw-bold">${o.label}</div>
-                    <div class="text-muted small">${o.extra || '—'}</div>
+                    <div class="fw-bold">${escapeHtml(o.label)}</div>
+                    <div class="text-muted small">${escapeHtml(o.extra || '—')}</div>
                 </label>
             </td>
             <td data-label="Tipo"><span class="badge ${badgeColor}" title="Tipo original: ${o.rawType || o.type || 'unknown'}">${category === 'music_video' ? '<i class="fas fa-video me-1" aria-hidden="true"></i>' : category === 'live' ? '<i class="fas fa-tower-broadcast me-1" aria-hidden="true"></i>' : ''}${categoryLabel}</span></td>
@@ -845,7 +938,12 @@ function renderSelectionList() {
     }).join('');
 
     list.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.addEventListener('change', updateSelectionCount);
+        cb.addEventListener('change', () => {
+            if (cb.checked) selectedSelectionIds.add(String(cb.value));
+            else selectedSelectionIds.delete(String(cb.value));
+            document.getElementById('selection-error')?.classList.add('d-none');
+            updateSelectionCount();
+        });
     });
     updateSelectionCount();
 }
@@ -853,7 +951,7 @@ function renderSelectionList() {
 async function submitAlbumSelection(event) {
     event?.preventDefault();
     if (selectionState.isSubmitting || !selectionState.isOpen) return;
-    const checked = Array.from(document.querySelectorAll('#selection-list input:checked')).map(c=>c.value);
+    const checked = Array.from(selectedSelectionIds);
     if (!checked.length) {
         showToast('Selecione ao menos um item para continuar.', 'warning');
         return;

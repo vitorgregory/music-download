@@ -6,3 +6,5 @@
 - [x] Painel de detalhes com logs e ações
 - [x] Configurações rápidas navegáveis
 - [x] Validação visual em desktop e mobile
+- [x] Aplicação da UX no frontend Flask mesclado, preservando APIs, Socket.IO, CSRF e configurações
+- [x] Métricas reais da fila, painel de detalhes e nova tentativa usando contratos existentes
