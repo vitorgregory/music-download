@@ -250,36 +250,35 @@ class WrapperManager(ProcessManager):
         self.needs_2fa = False
         self.cached_2fa_attempt = False
 
-    def _set_2fa_state(self, enabled: bool):
+    def _set_2fa_state(self, enabled):
         with self._lock:
             self.needs_2fa = bool(enabled)
             if not enabled:
                 self.cached_2fa_attempt = False
 
-    def _looks_like_2fa_prompt(self, text: str) -> bool:
+    def _looks_like_2fa_prompt(self, text):
         lower = text.lower()
         if not lower:
             return False
 
-        if re.search(r"2fa\s*:\s*(true|yes|requested|required)", lower):
+        if re.search(r"\b2fa\s*:\s*(true|yes|requested|required)\b", lower):
             return True
 
         has_2fa_signal = any(token in lower for token in [
             "2fa", "otp", "one-time", "verification code", "authentication code",
-            "enter the code", "verify code", "security code",
+            "enter the code", "verify code", "security code"
         ])
         if not has_2fa_signal:
             return False
 
         auth_context = any(token in lower for token in [
             "credentialhandler", "credential handler", "auth", "authenticate",
-            "login", "verification", "verify", "code",
+            "login", "verification", "verify", "code"
         ])
         return auth_context
 
-    def start(self, email: str, password: str) -> bool:
-        if self.running:
-            return False
+    def start(self, email, password):
+        if self.running: return False
 
         wrapper_path = get_wrapper_bin_path()
         rootfs_dir = get_wrapper_rootfs_path()
@@ -299,15 +298,9 @@ class WrapperManager(ProcessManager):
             env.setdefault("WRAPPER_BIN", str(wrapper_path))
             env.setdefault("WRAPPER_ROOTFS", str(rootfs_dir))
             env.setdefault("WRAPPER_CACHE_DIR", str(get_wrapper_cache_dir()))
-            kwargs = dict(
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.PIPE,
-                bufsize=1,
-                universal_newlines=True,
-                cwd=str(APP_ROOT),
-                env=env,
-            )
+            kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          stdin=subprocess.PIPE, bufsize=1, universal_newlines=True,
+                          cwd=str(APP_ROOT), env=env)
             if platform.system() == 'Windows':
                 kwargs.update(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             else:
@@ -323,45 +316,6 @@ class WrapperManager(ProcessManager):
         except Exception as e:
             self._log(f"Erro Wrapper: {e}")
             return False
-
-    def _stream_logs(self):
-        try:
-            while True:
-                if not self.process:
-                    break
-                line = self.process.stdout.readline()
-                if line == '' or line is None:
-                    break
-                line = line.strip()
-                if not line:
-                    if self.process.poll() is not None:
-                        break
-                    continue
-                clean = strip_ansi(line)
-                self._log(line)
-                clean_lower = clean.lower()
-
-                if self._looks_like_2fa_prompt(clean):
-                    self._set_2fa_state(True)
-                    self._log(">>> 2FA NECESSÁRIO - Digite o código <<<")
-
-                if any(token in clean_lower for token in [
-                    "response type 6", "authentication successful", "logged in successfully",
-                    "login successful", "2fa verified", "verified successfully",
-                ]):
-                    self._set_2fa_state(False)
-
-                if any(err in clean_lower for err in [
-                    "network", "timeout", "connection refused", "connection reset",
-                    "offline", "unreachable",
-                ]):
-                    self._log(">>> Queda de internet detectada - Tentando reconectar offline <<<")
-        finally:
-            with self._lock:
-                self.running = False
-                if self.process is None or self.process.poll() is not None:
-                    self.needs_2fa = False
-
 
 class DownloaderManager(ProcessManager):
     def __init__(self):
