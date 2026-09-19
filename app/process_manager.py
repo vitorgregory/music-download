@@ -204,8 +204,7 @@ class ProcessManager:
             running = self.running
         if proc and running and proc.poll() is None and getattr(proc, 'stdin', None) is not None:
             try:
-                proc.stdin.write(f"{text}
-")
+                proc.stdin.write(f"{text}")
                 proc.stdin.flush()
                 self._log(f">>> Input enviado: {text}")
                 with self._lock:
@@ -262,7 +261,7 @@ class WrapperManager(ProcessManager):
         if not lower:
             return False
 
-        if re.search(r"2fa\s*:\s*(true|yes|requested|required)", lower):
+        if re.search(r"2fa\s*:\s*(true|yes|requested|required)", lower):
             return True
 
         has_2fa_signal = any(token in lower for token in [
@@ -514,8 +513,7 @@ class DownloaderManager(ProcessManager):
                 data_dir = os.path.join(self.base_dir, "data")
                 os.makedirs(data_dir, exist_ok=True)
                 with open(os.path.join(data_dir, "current_task.log"), "w", encoding="utf-8") as f:
-                    f.write(f"--- Starting download: {link} at {time.ctime()} ---
-")
+                    f.write(f"--- Starting download: {link} at {time.ctime()} ---")
             except Exception:
                 pass
 
@@ -622,8 +620,7 @@ class DownloaderManager(ProcessManager):
                     data_dir = os.path.join(self.base_dir, "data")
                     os.makedirs(data_dir, exist_ok=True)
                     with open(os.path.join(data_dir, "current_task.log"), "a", encoding="utf-8") as f:
-                        f.write(line + "
-")
+                        f.write(line + "")
                 except Exception:
                     pass
 
