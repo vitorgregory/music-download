@@ -250,6 +250,29 @@ class WrapperManager(ProcessManager):
                 if self.process is None or self.process.poll() is not None:
                     self.needs_2fa = False
 
+    def _parse_duration_to_seconds(duration_str: str | None) -> int | None:
+            """
+            Converte 'mm:ss' ou 'hh:mm:ss' em segundos.
+            Retorna None se a string estiver vazia ou inválida.
+            """
+            if not duration_str:
+                return None
+
+            parts = duration_str.split(":")
+            try:
+                nums = list(map(int, parts))
+            except ValueError:
+                return None
+
+            if len(nums) == 2:
+                m, s = nums
+                return m * 60 + s
+            elif len(nums) == 3:
+                h, m, s = nums
+                return h * 3600 + m * 60 + s
+
+            return None             
+
 class DownloaderManager(ProcessManager):
     def __init__(self):
         super().__init__()
