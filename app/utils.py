@@ -33,6 +33,7 @@ BOOL_CONFIG_KEYS = {
 }
 
 REQUIRED_CONFIG_KEYS = set(STRING_CONFIG_KEYS)
+MUSIC_FOLDER = os.environ.get("MUSIC_FOLDER", "Apple Music")
 
 def strip_ansi(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -299,7 +300,7 @@ def generate_m3u_playlist(base_folder_key):
              folder_name = os.path.join("downloads", os.path.basename(folder_name))
         
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        search_path = os.path.join(base_dir, "apple-music-downloader", folder_name)
+        search_path = os.path.join(base_dir, MUSIC_FOLDER, folder_name)
 
         if not os.path.exists(search_path): return
 
