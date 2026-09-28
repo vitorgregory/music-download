@@ -338,7 +338,7 @@ class DownloaderManager(ProcessManager):
                 elif is_live:
                     kind = "live"
                 else:
-                    kind = "unknown"
+                    kind = "album"
 
             attributes = {
                 "name": label,
@@ -382,9 +382,9 @@ class DownloaderManager(ProcessManager):
         self.is_playlist = False
         try:
             meta = fetch_metadata(link)
-            if meta and meta.get('type') == 'Playlist':
+            if meta and meta.get('type') == "Playlist":
                 self.is_playlist = True
-                cmd.append("--playlist")  # ou a flag que seu downloader Go usar
+                cmd.append("playlist")  # ou a flag que seu downloader Go usar
 
         except: pass
 
