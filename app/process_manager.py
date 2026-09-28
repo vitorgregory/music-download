@@ -384,7 +384,11 @@ class DownloaderManager(ProcessManager):
             meta = fetch_metadata(link)
             if meta and meta.get('type') == 'Playlist':
                 self.is_playlist = True
+                cmd.append("--playlist")  # ou a flag que seu downloader Go usar
+
         except: pass
+
+        cmd.append(link)
         
         try:
             # Ensure diagnostic log exists and reset it at start
