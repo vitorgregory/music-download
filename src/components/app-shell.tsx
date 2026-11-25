@@ -15,6 +15,7 @@ export function AppShell({ children, title, eyebrow, connected }: { children: Re
   ];
 
   return <div className="min-h-screen bg-background text-foreground">
+    <a href="#app-nav-main" className="absolute left-0 top-0 z-50 rounded-sm bg-background p-4 font-medium text-primary shadow opacity-100 focus:not-sr-only sr-only focus:absolute focus:left-0 focus:top-0">Pular para o conteúdo principal</a>
     {open && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-foreground/20 md:hidden" onClick={() => setOpen(false)} />}
     <aside className={cn("fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-foreground text-primary-foreground transition-transform md:w-20 md:translate-x-0", open ? "translate-x-0" : "-translate-x-full") }>
       <div className="flex h-20 items-center justify-between border-b border-primary-foreground/15 px-5 md:justify-center md:px-0">
@@ -31,7 +32,7 @@ export function AppShell({ children, title, eyebrow, connected }: { children: Re
         <div className="flex items-center gap-3"><Button variant="outline" size="icon" className="md:hidden" onClick={() => setOpen(true)}><Menu/><span className="sr-only">Abrir menu</span></Button><div><p className="text-[11px] font-bold uppercase text-primary">{eyebrow}</p><h1 className="font-display text-xl font-semibold sm:text-2xl">{title}</h1></div></div>
         <button className="hidden items-center gap-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-xs font-medium sm:flex" onClick={() => setConnectionOpen(true)}><Activity className="size-4 text-success"/> Backend <span className="text-muted-foreground">Conectar</span></button>
       </header>
-      <main className="mx-auto max-w-[1600px] p-4 md:p-8">{children}</main>
+      <main id="app-nav-main" className="mx-auto max-w-[1600px] p-4 md:p-8">{children}</main>
     </div>
     <ConnectionDrawer open={connectionOpen} onClose={() => setConnectionOpen(false)} />
   </div>;
