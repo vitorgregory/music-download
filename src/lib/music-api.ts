@@ -13,6 +13,11 @@ export type QueueItem = {
   failed_attempts?: number;
   next_try_at?: string | null;
   existing_path?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  track_count?: number | null;
+  duration_sec?: number | null;
+  release_date?: string | null;
 };
 export type SelectionOption = {
   id: string;
@@ -46,7 +51,7 @@ export type MusicState = {
   wrapper_installed: boolean;
   downloader_installed: boolean;
 };
-export type Metadata = { title?: string; type?: string; image?: string };
+export type Metadata = { title?: string; type?: string; image?: string; trackCount?: number; durationSec?: number; artist?: string; albumTitle?: string; releaseDate?: string };
 
 const configuredBase = (import.meta.env['VITE_MUSIC_DOWNLOAD_API_URL'] as string | undefined)?.replace(/\/$/, "");
 export const musicApiBase = configuredBase ?? "";
