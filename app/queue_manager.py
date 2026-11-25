@@ -298,7 +298,7 @@ def queue_worker():
                     break
                 
                 # Update progress
-                new_perc = extract_percentage(downloader.logs)
+                new_perc = extract_percentage(getattr(downloader, 'logs', []))
                 if new_perc and new_perc != last_perc:
                     last_perc = new_perc
                     update_status(current_id, "processing", progress=new_perc)
@@ -344,7 +344,7 @@ def queue_worker():
                 continue
             
             # Check for "already exists" case
-            log_text = "\n".join(list(downloader.logs)[-50:]).lower()
+            log_text = "\n".join(list(getattr(downloader, 'logs', []))[-50:]).lower()
             if "already exists" in log_text or "track already exists" in log_text:
                 path = locate_existing_file(current_id)
                 if path:
@@ -356,8 +356,8 @@ def queue_worker():
                 continue
             
             # FAILURE: Analyze error
-            error_msg = find_error_in_logs(downloader.logs)
-            recent_logs = list(downloader.logs)[-12:]
+            error_msg = find_error_in_logs(getattr(downloader, 'logs', []))
+            recent_logs = list(getattr(downloader, 'logs', []))[-12:]
             print(f"[QUEUE] Task #{current_id}: Last downloader output:")
             for recent_line in recent_logs:
                 print(f"[DOWNLOADER] {recent_line}")

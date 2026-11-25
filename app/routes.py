@@ -437,13 +437,16 @@ def submit_selection():
             return jsonify({"success": False, "accepted": False, "error_code": "INCOMPLETE_RELEASE_METADATA", "message": "O item selecionado não informa a quantidade de faixas."}), 400
     
     # Enviar como está para o downloader (ele entende espaços, vírgulas, ranges, etc)
+    current_selection_id = downloader.selection_id
     if not downloader.write_input(sel):
         return jsonify({"success": False, "accepted": False, "error_code": "PROCESS_UNAVAILABLE", "message": "O downloader não aceitou a seleção."}), 409
+    # ACK: limpa o estado da seleção e fecha o stdin para o subprocess seguir sem ecoar prompts
+    downloader.acknowledge_selection()
     return jsonify({
         "success": True,
         "accepted": True,
-        "selection_id": downloader.selection_id,
-        "request_id": downloader.selection_id,
+        "selection_id": current_selection_id,
+        "request_id": current_selection_id,
         "task_ids": [],
         "message": "Seleção adicionada à fila"
     })
@@ -453,9 +456,12 @@ def submit_selection():
 def skip_selection():
     if not downloader.needs_input:
         return jsonify({"success": False, "accepted": False, "error_code": "SELECTION_NOT_ACTIVE", "message": "Nenhuma seleção está aguardando confirmação."}), 409
+    current_selection_id = downloader.selection_id
     if not downloader.close_stdin():
         return jsonify({"success": False, "accepted": False, "error_code": "PROCESS_UNAVAILABLE", "message": "O downloader não aceitou a ação."}), 409
-    return jsonify({"success": True, "accepted": True, "selection_id": downloader.selection_id, "message": "Seleção ignorada"})
+    # ACK: limpa o estado e marca a sessão como resolvida (stdin já fechado acima)
+    downloader.acknowledge_selection()
+    return jsonify({"success": True, "accepted": True, "selection_id": current_selection_id, "message": "Seleção ignorada"})
 
 # --- Configs ---
 

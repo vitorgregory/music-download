@@ -1,3 +1,7 @@
+# Music Download — instalável pelo painel do ZimaOS / CasaOS
+# No painel ZimaOS: Apps → Custom Compose → importar este arquivo.
+# No terminal: docker compose --project-name music-download up -d
+
 name: music-download
 
 x-casaos:
@@ -14,18 +18,18 @@ x-casaos:
     en_US: Apple Music download manager
     pt_BR: Gerenciador de downloads do Apple Music
   description:
-    en_US: Manage Apple Music downloads from a web interface.
-    pt_BR: Gerencie downloads do Apple Music por uma interface web.
+    en_US: Manage Apple Music downloads (ALAC, AAC, Dolby Atmos) from a web interface.
+    pt_BR: Gerencie downloads do Apple Music (ALAC, AAC, Atmos) por uma interface web.
   author: Vitor Gregory
   developer: Vitor Gregory
   category: Media
   architectures:
     - amd64
-  version: "1.0.0"
-  update_at: "2026-09-18"
+  version: "1.0.1"
+  update_at: "2026-11-25"
   release_notes:
-    en_US: Initial ZimaOS custom-app manifest.
-    pt_BR: Manifesto inicial para app personalizado do ZimaOS.
+    en_US: Added track-count display, cancel button, skip-link accessibility, focus-visible rings.
+    pt_BR: Exibição de faixas, botão cancelar, acessibilidade skip-link e focus-visible.
 
 services:
   music-download:
@@ -34,13 +38,15 @@ services:
     container_name: music-download
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "${MUSIC_PORT:-5000}:5000"
     volumes:
-      - /DATA/AppData/music-download/data:/app/data
-      - /DATA/AppData/music-download/downloads:/app/downloads
-      - /DATA/AppData/music-download/config:/app/config
-      - /DATA/AppData/music-download/wrapper-lite:/app/wrapper-lite-data
+      # ZimaOS padrão: ajuste se sua pasta de deploy for diferente
+      - "/DATA/AppData/music-download/data:/app/data"
+      - "/DATA/AppData/music-download/downloads:/app/downloads"
+      - "/DATA/AppData/music-download/config:/app/config"
+      - "/DATA/AppData/music-download/wrapper-lite-data:/app/wrapper-lite-data"
     environment:
+      TZ: "${TZ:-America/Sao_Paulo}"
       PYTHONUNBUFFERED: "1"
       FLASK_DEBUG: "0"
       DISABLE_QUEUE_WORKER: "0"
@@ -48,36 +54,12 @@ services:
       WRAPPER_ROOTFS: "/app/rootfs"
       WRAPPER_CACHE_DIR: "/app/config/wrapper"
       WRAPPER_LITE_2FA_FILE: "/app/wrapper-lite-data/2fa.txt"
-      RATELIMIT_STORAGE_URL: "redis://redis:6379/0"
-      STALL_TIMEOUT_SECONDS: "300"
-      MAX_RETRIES: "3"
-      RETRY_BASE_SECONDS: "5"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
+      STALL_TIMEOUT_SECONDS: "${STALL_TIMEOUT:-300}"
+      MAX_RETRIES: "${MAX_RETRIES:-3}"
+      RETRY_BASE_SECONDS: "${RETRY_BASE:-5}"
     depends_on:
       wrapper-lite:
         condition: service_started
-      redis:
-        condition: service_healthy
-
-  redis:
-    image: redis:7-alpine
-    platform: linux/amd64
-    container_name: music-download-redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - /DATA/AppData/music-download/redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   wrapper-lite:
     build:
@@ -89,10 +71,8 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     privileged: true
-    env_file:
-      - .env
     volumes:
-      - /DATA/AppData/music-download/wrapper-lite:/app/rootfs/data
+      - "/DATA/AppData/music-download/wrapper-data:/app/rootfs/data"
     cap_add:
       - SYS_ADMIN
     security_opt:

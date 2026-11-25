@@ -99,17 +99,21 @@ class ProcessManager:
         with self._lock:
             proc = self.process
             running = self.running
-        if proc and running and proc.poll() is None and getattr(proc, 'stdin', None) is not None:
-            try:
-                proc.stdin.write(f"{text}\n")
-                proc.stdin.flush()
-                self._log(f">>> Input enviado: {text}")
-                with self._lock:
-                    self.needs_input = False
-                return True
-            except Exception:
-                return False
-        return False
+        if not (proc and running and proc.poll() is None):
+            return False
+        stdin = getattr(proc, 'stdin', None)
+        if stdin is None or getattr(stdin, 'closed', False):
+            return False
+        try:
+            stdin.write(f"{text}\n")
+            stdin.flush()
+        except Exception as e:
+            self._log(f"Aviso: falha ao gravar entrada no processo: {e}")
+            return False
+        self._log(f">>> Input enviado: {text}")
+        with self._lock:
+            self.needs_input = False
+        return True
 
     def close_stdin(self):
         with self._lock:
@@ -255,6 +259,8 @@ class DownloaderManager(ProcessManager):
         super().__init__()
         self.current_format = "alac"
         self.is_playlist = False
+        # True após acknowledge_selection(): inibe nova detecção/emissão de seleção
+        self._selection_ack_sent = False
         # Pré-compila Regex para performance
         self.re_table = re.compile(r"^\s*\|\s*(\d+)\s*\|")
         self.re_list = re.compile(r"(?:^|\s|\[\w+\]\s+)(\d+)\s*[\.\:\-\)\]]\s+(.+)$")
@@ -329,33 +335,31 @@ class DownloaderManager(ProcessManager):
             extras.append(col_stripped)
 
         # Fallbacks seguros: se não tiver info, não quebra
-        
-            if not kind:
-                # Se tiver muitas faixas, assume álbum
-                if track_count and track_count >= 7:
-                    kind = "album"
-                # Se tiver indicação de live, assume live (subtipo de álbum)
-                elif is_live:
-                    kind = "live"
-                else:
-                    kind = "album"
+        if not kind:
+            # Se tiver muitas faixas, assume álbum
+            if track_count and track_count >= 7:
+                kind = "album"
+            # Se tiver indicação de live, assume live (subtipo de álbum)
+            elif is_live:
+                kind = "live"
+            else:
+                kind = "album"
 
-            attributes = {
-                "name": label,
-                "releaseDate": date or "",
-                "track_count": track_count if track_count is not None else 0,
-                "duration": duration,
-                "isLive": is_live,
-            }
+        attributes = {
+            "name": label,
+            "releaseDate": date or "",
+            "track_count": track_count if track_count is not None else 0,
+            "duration": duration,
+            "isLive": is_live,
+        }
 
-            normalized = normalize_media_item({
-                "id": entry_id,
-                "type": kind,
-                "attributes": attributes,
-            })
-            ...
-            normalized["label"] = label
-            normalized["kind"] = kind
+        normalized = normalize_media_item({
+            "id": entry_id,
+            "type": kind,
+            "attributes": attributes,
+        })
+        normalized["label"] = label
+        normalized["kind"] = kind
 
         return normalized
 
@@ -370,26 +374,23 @@ class DownloaderManager(ProcessManager):
 
         cmd = ["go", "run", "main.go"]
         self.current_format = "alac"
-        
-        if args: 
+
+        if args:
             cmd.extend(args)
             if "--atmos" in args: self.current_format = "atmos"
             elif "--aac" in args: self.current_format = "aac"
-            
+
         cmd.append(link)
-        
+
         # Check Playlist
         self.is_playlist = False
         try:
             meta = fetch_metadata(link)
             if meta and meta.get('type') == "Playlist":
                 self.is_playlist = True
-        
-        except: pass
-        cmd = ["go", "run", "main.go"]
+        except:
+            pass
 
-        cmd.append(link)
-        
         try:
             # Ensure diagnostic log exists and reset it at start
             try:
@@ -420,6 +421,7 @@ class DownloaderManager(ProcessManager):
                 self.needs_input = False
                 self.input_options = []
                 self.selection_id = None
+                self._selection_ack_sent = False
                 self.logs.clear()
                 self.logs.append(f"Iniciando: {link}")
             threading.Thread(target=self._stream_logs, daemon=True).start()
@@ -483,8 +485,25 @@ class DownloaderManager(ProcessManager):
                 seen.add(key)
         return merged
 
+    def acknowledge_selection(self):
+        """Chamar APÓS write_input (ou close_stdin) com sucesso.
+
+        Limpa o estado da seleção, marca a sessão como resolvida para o
+        _stream_logs parar de detectar/re-emitir opções, e fecha o stdin para
+        o subprocess parar de esperar entrada ou ecoar prompts.
+        """
+        with self._lock:
+            self.needs_input = False
+            self.input_options = []
+            self.selection_id = None
+            self._selection_ack_sent = True
+        # close_stdin exige running=True, por isso é chamado fora do lock acima
+        self.close_stdin()
+
     def _stream_logs(self):
         log_buffer = []
+        # Emite 'selection_required' UMA única vez por sessão de seleção
+        selection_emitted = False
         try:
             while True:
                 if not self.process:
@@ -511,6 +530,13 @@ class DownloaderManager(ProcessManager):
 
                 self._log(line)
                 log_buffer.append(line)
+
+                # Sessão de seleção já resolvida: apenas registra logs, sem re-detectar
+                if self._selection_ack_sent:
+                    if self.process.poll() is not None:
+                        break
+                    continue
+
                 clean_line = strip_ansi(line).lower()
 
                 if any(marker in clean_line for marker in [
@@ -522,52 +548,47 @@ class DownloaderManager(ProcessManager):
                 ]):
                     self._log(">>> ERRO DETECTADO, encerrando entrada interativa <<<")
                     self.close_stdin()
+                    continue
 
-                # Detecção de Input
-                if any(k in clean_line for k in self.selection_keywords):
-                    with self._lock:
-                        self.needs_input = True
-                        self.selection_id = self.selection_id or f"selection-{int(time.time() * 1000)}"
-                    
-                    # Try to parse options immediately
+                # Detecção de Input: a keyword abre a sessão; as linhas seguintes
+                # apenas completam as opções (sem re-emitir o evento socket)
+                has_keyword = any(k in clean_line for k in self.selection_keywords)
+                if has_keyword or self.needs_input:
+                    first_detection = not self.needs_input
+                    if first_detection:
+                        with self._lock:
+                            self.needs_input = True
+                            self.selection_id = self.selection_id or f"selection-{int(time.time() * 1000)}"
+                        selection_emitted = False
+
                     options = self._parse_options(log_buffer)
                     if options:
                         with self._lock:
-                            self.input_options = options
-                        self._log(">>> AGUARDANDO SELEÇÃO DO USUÁRIO <<<")
-                        # Emit Socket.IO event to notify frontend of selection required
-                        try:
-                            from . import socketio
-                            socketio.emit('selection_required', {
-                                'options': options,
-                                'options_count': len(options),
-                                'selection_id': self.selection_id,
-                                'request_id': self.selection_id
-                            }, skip_sid=True)
-                        except Exception as e:
-                            self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
-                    else:
+                            merged = self._merge_options(self.input_options + options)
+                            self.input_options = merged
+                            selection_id = self.selection_id
+                        if not selection_emitted:
+                            selection_emitted = True
+                            self._log(">>> AGUARDANDO SELEÇÃO DO USUÁRIO <<<")
+                            # Emite UMA vez; opções que chegarem depois seguem em
+                            # input_options e chegam ao frontend via /api/state
+                            try:
+                                from . import socketio
+                                socketio.emit('selection_required', {
+                                    'options': merged,
+                                    'options_count': len(merged),
+                                    'selection_id': selection_id,
+                                    'request_id': selection_id
+                                }, skip_sid=True)
+                            except Exception as e:
+                                self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
+                    elif first_detection:
                         # Options will come in next lines, wait for them
                         self._log(">>> PROMPT DETECTADO, AGUARDANDO OPÇÕES <<<")
 
-                # If prompt arrived before options, keep retrying as new lines arrive
-                if self.needs_input:
-                    retry_options = self._parse_options(log_buffer)
-                    if retry_options:
-                        merged = self._merge_options(self.input_options + retry_options)
-                        with self._lock:
-                            self.input_options = merged
-                        self._log(">>> OPÇÕES DETECTADAS, AGUARDANDO SELEÇÃO <<<")
-                        try:
-                            from . import socketio
-                            socketio.emit('selection_required', {
-                                'options': merged,
-                                'options_count': len(merged),
-                                'selection_id': self.selection_id,
-                                'request_id': self.selection_id
-                            }, skip_sid=True)
-                        except Exception as e:
-                            self._log(f"Aviso: Falha ao emitir evento Socket.IO: {e}")
+                # Se o processo terminou, encerra a leitura imediatamente
+                if self.process.poll() is not None:
+                    break
 
                         
         finally:

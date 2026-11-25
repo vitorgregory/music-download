@@ -1,14 +1,16 @@
 {
   "name": "music-download",
-  "description": "Apple Music Downloader Web UI",
+  "description": "Gerenciador de downloads do Apple Music — ALAC, AAC e Dolby Atmos via interface web.",
   "icon": "icon.png",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "architecture": "amd64",
   "ports": [{"external": 5000, "internal": 5000, "protocol": "tcp"}],
   "volumes": [
-    {"name": "data", "description": "Credentials & Queue DB"},
-    {"name": "downloads", "description": "Downloaded music files"},
-    {"name": "config", "description": "Apple Music config"}
+    {"name": "data", "description": "Credenciais e banco da fila"},
+    {"name": "downloads", "description": "Arquivos de música baixados"},
+    {"name": "config", "description": "Configuração do Apple Music wrapper"},
+    {"name": "wrapper-lite-data", "description": "Dados do Wrapper Lite (2FA)"},
+    {"name": "redis", "description": "Dados Redis"}
   ],
   "environment": [
     {"name": "TZ", "value": "America/Sao_Paulo"}
