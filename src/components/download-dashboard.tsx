@@ -18,8 +18,13 @@ const typeNames: Record<string, string> = { album: "Álbum", ep: "EP", single: "
 const emptyState: MusicState = { wrapper: { running: false, logs: [], needs_2fa: false }, downloader: { running: false, logs: [], needs_selection: false, options: [] }, queue: { items: [], paused: false }, wrapper_installed: true, downloader_installed: true };
 
 function progressOf(item: QueueItem) {
-  const value = Number(item.progress);
-  return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : item.status === "completed" ? 100 : 0;
+  if (!item.progress) return 0;
+  const s = String(item.progress);
+  if (!s) return 0;
+  const m = s.match(/\d+/);
+  const n = Number(m?.[0]);
+  if (!Number.isFinite(n)) return item.status === "completed" ? 100 : 0;
+  return Math.min(100, Math.max(0, n));
 }
 
 function mapTaskStatus(status: string): TaskStatus {
