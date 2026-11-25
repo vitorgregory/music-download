@@ -163,6 +163,20 @@
 
   button, input, select { font: inherit; }
 
+  [href],
+  [role="button"],
+  button,
+  input,
+  textarea,
+  select {
+    outline: none;
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-ring);
+    border-radius: var(--radius-sm);
+  }
+
   ::selection { background: var(--accent); color: var(--accent-foreground); }
 }
 
