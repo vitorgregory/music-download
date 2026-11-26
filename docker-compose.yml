@@ -62,11 +62,8 @@ services:
         condition: service_started
 
   wrapper-lite:
-    build:
-      context: https://github.com/WorldObservationLog/wrapper.git#lite
-      dockerfile: Dockerfile
-    image: music-download-wrapper-lite:latest
-    pull_policy: build
+    image: ghcr.io/vitorgregory/music-download-wrapper-lite:latest
+    pull_policy: always
     container_name: music-download-wrapper-lite
     platform: linux/amd64
     restart: unless-stopped
@@ -77,3 +74,15 @@ services:
       - SYS_ADMIN
     security_opt:
       - seccomp=unconfined
+
+  # Auto-update: monitora e atualiza o container quando uma nova imagem é publicada
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: music-download-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: --interval 300 --label-enable --cleanup
+    environment:
+      WATCHTOWER_POLL_INTERVAL: "300"
+      TZ: "${TZ:-America/Sao_Paulo}"
